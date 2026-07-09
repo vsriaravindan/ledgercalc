@@ -1,6 +1,0 @@
-{
-  "name": "LedgerCalc",
-  "description": "A calculator app with personal finance tracking, group management, and persistent history.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

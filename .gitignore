@@ -47,3 +47,21 @@ Thumbs.db
 *.tmp
 .cxx/
 *.cxx
+*.zip
+
+# Generated AI Studio / temp files
+fix_*.py
+patch_*.py
+patch.kt
+patch.txt
+test.sh
+restore_colors.py
+revert_neon.py
+fix.py
+fix2.py
+metadata.json
+calchub.zip
+assets/.aistudio/
+
+# Gradle wrapper jar (re-download on build)
+**/gradle-wrapper.jar
