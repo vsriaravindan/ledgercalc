@@ -13,11 +13,13 @@ import com.example.calchub.data.repository.FavoritesRepository
 @OptIn(ExperimentalMaterial3Api::class)
 /**
  * A standardized Scaffold for Calculator screens.
- * Includes a [NeonHeader] with back navigation and favorite toggle.
+ * Includes a [NeonHeader] with back navigation, favorite toggle, and share.
  *
  * @param title The title of the calculator screen.
  * @param onBackClick Callback for the back button.
  * @param calculatorId The unique ID of the calculator (for favorites).
+ * @param onShare Callback when share is clicked. Null hides the share button.
+ * @param shareContent The text to share. Only used when onShare is set.
  * @param content The content of the screen.
  */
 @Composable
@@ -25,6 +27,8 @@ fun CalculatorScaffold(
     title: String,
     onBackClick: () -> Unit,
     calculatorId: String,
+    onShare: (() -> Unit)? = null,
+    shareContent: String = "",
     content: @Composable (PaddingValues) -> Unit
 ) {
     val context = LocalContext.current
@@ -39,7 +43,10 @@ fun CalculatorScaffold(
                 subtitle = title,
                 isFavorite = isFavorite,
                 onBackClick = onBackClick,
-                onFavoriteClick = { favoritesRepository.toggleFavorite(calculatorId) }
+                onFavoriteClick = { favoritesRepository.toggleFavorite(calculatorId) },
+                onShare = if (onShare != null && shareContent.isNotEmpty()) {
+                    { onShare() }
+                } else null,
             )
         },
         containerColor = androidx.compose.ui.graphics.Color.Transparent,

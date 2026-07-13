@@ -2,6 +2,7 @@ package com.example.utils
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
 import com.example.data.AppDatabase
 import com.example.data.GlobalHistory
 import com.example.data.LedgerGroup
@@ -83,7 +84,7 @@ object BackupManager {
             val dao = database.calculatorDao()
 
             // Wrap in transaction so a failure rolls back everything
-            database.runInTransaction {
+            database.withTransaction {
                 // We clear existing data for a full restore.
                 database.clearAllTables()
 

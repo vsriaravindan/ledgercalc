@@ -8,10 +8,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import com.example.data.AppDatabase
 import com.example.data.CalculatorRepository
+import com.example.data.MIGRATION_2_3
 import com.example.data.GlobalHistory
 import com.example.data.LedgerGroup
+import com.example.data.MIGRATION_1_2
 import com.example.data.TransactionEntry
 import com.example.utils.CalculatorUtils
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +30,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         application,
         AppDatabase::class.java, "calculator-db"
     )
-    .addMigrations(MIGRATION_1_2)
+    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
     .build()
 
     private val repository = CalculatorRepository(db.calculatorDao())
@@ -56,6 +60,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _includeWatermark = MutableStateFlow(prefs.getBoolean("include_watermark", true))
     val includeWatermark: StateFlow<Boolean> = _includeWatermark.asStateFlow()
 
+    private val _fontFamily = MutableStateFlow(prefs.getString("font_family", "Default") ?: "Default")
+    val fontFamily: StateFlow<String> = _fontFamily.asStateFlow()
+
     fun setCurrency(symbol: String) {
         _currencySymbol.value = symbol
         prefs.edit().putString("currency", symbol).apply()
@@ -70,6 +77,18 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         _includeWatermark.value = include
         prefs.edit().putBoolean("include_watermark", include).apply()
     }
+
+    fun setFontFamily(font: String) {
+        _fontFamily.value = font
+        prefs.edit().putString("font_family", font).apply()
+    }
+
+    val selectedFontFamily: androidx.compose.ui.text.font.FontFamily
+        get() {
+            val fontName = _fontFamily.value
+            return com.example.ui.theme.AppFont.entries.firstOrNull { it.displayName == fontName }?.fontFamily
+                ?: androidx.compose.ui.text.font.FontFamily.Default
+        }
 
     private val _result = MutableStateFlow("")
     val result: StateFlow<String> = _result.asStateFlow()
@@ -122,6 +141,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         saveStateForUndo()
         _expression.value = current + value
         updateResult()
+        scheduleAutoSave()
     }
 
     fun onClear() {
@@ -137,6 +157,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             saveStateForUndo()
             _expression.value = current.dropLast(1)
             updateResult()
+            scheduleAutoSave()
         }
     }
 
@@ -180,7 +201,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                         TransactionEntry(
                             groupId = groupId,
                             amount = resVal,
-                            label = note.ifEmpty { expr }
+                            label = note.ifEmpty { expr },
+                            expression = expr
                         )
                     )
                 } else {
@@ -208,7 +230,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 TransactionEntry(
                     groupId = groupId,
                     amount = amount,
-                    label = label
+                    label = label,
+                    expression = ""
                 )
             )
         }
@@ -216,6 +239,26 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     // Undo/Redo logic
     private val MAX_UNDO = 50
+    private var autoSaveJob: Job? = null
+
+    private fun scheduleAutoSave() {
+        autoSaveJob?.cancel()
+        autoSaveJob = viewModelScope.launch {
+            delay(2000) // 2 seconds after last input
+            val expr = _expression.value
+            val res = _result.value
+            if (expr.isNotEmpty() && res.isNotEmpty()) {
+                val resVal = res.toDoubleOrNull() ?: return@launch
+                repository.insertGlobalHistory(
+                    GlobalHistory(
+                        expression = expr,
+                        result = resVal,
+                        note = "Not saved"
+                    )
+                )
+            }
+        }
+    }
 
     private fun saveStateForUndo() {
         val current = _expression.value
@@ -247,19 +290,39 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun updateResult() {
-        try {
-            if (_expression.value.isEmpty()) {
-                _result.value = ""
-                _calcError.value = false
-                return
-            }
-            val res = CalculatorUtils.evaluateExpression(_expression.value)
-            // Formatting to avoid .0 if it's an integer
-            _result.value = if (res % 1.0 == 0.0) {
-                res.toLong().toString()
+        val expr = _expression.value
+        if (expr.isEmpty()) {
+            _result.value = ""
+            _calcError.value = false
+            return
+        }
+
+        // If expression ends with operator, show the last number as preview
+        val trailingOps = setOf('+', '-', '*', '/', '^', '×', '÷')
+        if (expr.last() in trailingOps) {
+            // Extract the last number (token) after the last operator
+            val parts = expr.split(Regex("[+\\-*/^×÷]"))
+            val lastPart = parts.lastOrNull()?.trim() ?: ""
+            _result.value = if (lastPart.isNotEmpty() && lastPart.toDoubleOrNull() != null) {
+                val num = lastPart.toDouble()
+                if (num % 1.0 == 0.0) num.toLong().toString() else num.toString()
             } else {
-                res.toString()
+                ""
             }
+            _calcError.value = false
+            return
+        }
+
+        // If expression ends with a decimal point, show it as-is
+        if (expr.last() == '.') {
+            _result.value = expr
+            _calcError.value = false
+            return
+        }
+
+        try {
+            val res = CalculatorUtils.evaluateExpression(expr)
+            _result.value = if (res % 1.0 == 0.0) res.toLong().toString() else res.toString()
             _calcError.value = false
         } catch (e: Exception) {
             _result.value = ""
@@ -303,7 +366,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 TransactionEntry(
                     groupId = groupId,
                     amount = amount,
-                    label = history.note.ifEmpty { history.expression }
+                    label = history.note.ifEmpty { history.expression },
+                    expression = history.expression
                 )
             )
         }

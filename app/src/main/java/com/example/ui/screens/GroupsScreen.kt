@@ -83,7 +83,7 @@ fun GroupsScreen(
     ) { padding ->
         if (groups.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No groups yet. Tap + to create one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No groups yet. Tap + to create one.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
         } else {
             LazyColumn(
@@ -101,7 +101,7 @@ fun GroupsScreen(
                                 onLongClick = { showOptionsDialog = true }
                             ),
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                         color = MaterialTheme.colorScheme.surface
                     ) {
                         ListItem(
@@ -173,7 +173,7 @@ fun GroupsScreen(
                 showAddDialog = false
                 showEditDialog = null 
             },
-            title = { Text(if (showEditDialog != null) "Edit Group" else "New Ledger Group") },
+            title = { Text(if (showEditDialog != null) "Edit Group" else "New Ledger Group", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
             text = {
                 Column {
                     OutlinedTextField(

@@ -3,7 +3,6 @@ package com.example.calchub.ui.screens
 import com.example.calchub.ui.theme.NeonGreen
 import com.example.calchub.ui.theme.NeonPink
 import com.example.calchub.ui.theme.NeonText
-import com.example.calchub.ui.theme.NeonBackground
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -135,7 +134,7 @@ fun FavoritesScreen(onCalculatorClick: (String) -> Unit) {
                                     text = calculator.name,
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontWeight = FontWeight.Bold,
-                                        color = androidx.compose.ui.graphics.Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 )
                             }
@@ -150,9 +149,19 @@ fun FavoritesScreen(onCalculatorClick: (String) -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                        )
+                    )
+                )
                 .padding(horizontal = 16.dp)
                 .statusBarsPadding()
-                .padding(top = 16.dp, bottom = 24.dp)
+                .padding(top = 16.dp, bottom = 32.dp)
         ) {
             // Header
             Row(
@@ -166,9 +175,9 @@ fun FavoritesScreen(onCalculatorClick: (String) -> Unit) {
                     text = "Favorites",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = androidx.compose.ui.graphics.Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         shadow = Shadow(
-                            color = androidx.compose.ui.graphics.Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             blurRadius = 20f
                         )
                     )

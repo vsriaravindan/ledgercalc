@@ -2,18 +2,18 @@ package com.example.calchub.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Neon Palette
-val NeonGreen = Color(0xFF00FF9D)
-val NeonPink = Color(0xFFFF00FF)
-val NeonCyan = Color(0xFF00E5FF)
-val NeonBackground = Color(0xFF050505) // Deep Black
-val NeonSurface = Color(0xFF121212) // Slightly lighter black for cards
-val NeonText = Color(0xFFFFFFFF)
-val NeonTextSecondary = Color(0xFFB0B0B0)
-val NeonBorder = Color(0xFF2A2A2A)
-val NeonInactiveTrack = Color(0xFF333333)
+// Unified glass theme — same palette as the ledger side
+// Just aliased here so CalcHub components don't cross-package import
+val NeonGreen = Color(0xFF14B8A6)        // Teal (was neon green)
+val NeonPink = Color(0xFF7C3AED)         // Violet (was hot pink)
+val NeonCyan = Color(0xFFA78BFA)         // Light violet (was cyan)
+val NeonBackground = Color(0xFF0F0D1A)   // Deep bg
+val NeonSurface = Color(0xFF1E1B2E)      // Card surface
+val NeonText = Color(0xFFF1F0FF)         // Primary text
+val NeonTextSecondary = Color(0xFFA5A3C0)
+val NeonBorder = Color(0xFF3D3A5C)
+val NeonInactiveTrack = Color(0xFF2A2740)
 
-// Legacy NeoPOP Colors (Keeping for reference if needed, but mostly replacing)
-val NeoWhite = Color(0xFFFFFFFF)
+// NeoPop Colors
 val NeoBlack = Color(0xFF000000)
-val NeoGray = Color(0xFF2A2A2A)
+val NeoWhite = Color(0xFFFFFFFF)

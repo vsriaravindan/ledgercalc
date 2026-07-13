@@ -27,7 +27,10 @@ import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -88,7 +91,7 @@ class MainActivity : ComponentActivity() {
                 else -> isSystemInDarkTheme()
             }
                 
-            MyApplicationTheme(darkTheme = isDark) {
+            MyApplicationTheme(darkTheme = isDark, fontFamily = viewModel.selectedFontFamily) {
                 com.example.ui.components.AppBackground {
                     MainApp(viewModel)
                 }
@@ -108,20 +111,21 @@ fun MainApp(viewModel: CalculatorViewModel) {
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.width(300.dp),
-                drawerContainerColor = Color.Transparent,
-                drawerContentColor = Color.White
+                drawerContainerColor = MaterialTheme.colorScheme.surface,
+                drawerContentColor = MaterialTheme.colorScheme.onSurface
             ) {
                 androidx.compose.material3.Surface(
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(topEnd = 32.dp, bottomEnd = 32.dp)
+                    shape = RoundedCornerShape(topEnd = 32.dp, bottomEnd = 32.dp),
+                    color = MaterialTheme.colorScheme.surface,
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Spacer(Modifier.height(32.dp))
                         Text(
-                            "CalcHub Menu", 
+                            "LedgerCalc", 
                             modifier = Modifier.padding(16.dp), 
                             style = MaterialTheme.typography.titleLarge.copy(
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -130,9 +134,9 @@ fun MainApp(viewModel: CalculatorViewModel) {
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth().clickable { currentSection = "home"; scope.launch { drawerState.close() } }
                         ) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Calculate, contentDescription = null, tint = if (currentSection == "home") Color.White else Color.White.copy(alpha = 0.6f))
+                                Icon(Icons.Default.Calculate, contentDescription = null, tint = if (currentSection == "home") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                                 Spacer(Modifier.width(16.dp))
-                                Text("Home (Calculator)", color = if (currentSection == "home") Color.White else Color.White.copy(alpha = 0.6f))
+                                Text("Home (Calculator)", color = if (currentSection == "home") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                             }
                         }
                         
@@ -140,9 +144,20 @@ fun MainApp(viewModel: CalculatorViewModel) {
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth().clickable { currentSection = "financial"; scope.launch { drawerState.close() } }
                         ) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = if (currentSection == "financial") Color.White else Color.White.copy(alpha = 0.6f))
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = if (currentSection == "financial") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                                 Spacer(Modifier.width(16.dp))
-                                Text("Financial Calculator", color = if (currentSection == "financial") Color.White else Color.White.copy(alpha = 0.6f))
+                                Text("Financial Calculator", color = if (currentSection == "financial") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                            }
+                        }
+                        
+                        // Settings
+                        androidx.compose.material3.Surface(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth().clickable { currentSection = "settings"; scope.launch { drawerState.close() } }
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                Spacer(Modifier.width(16.dp))
+                                Text("Settings", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                             }
                         }
                     }
@@ -152,10 +167,20 @@ fun MainApp(viewModel: CalculatorViewModel) {
     ) {
         if (currentSection == "home") {
             HomeApp(viewModel, onOpenDrawer = { scope.launch { drawerState.open() } })
+        } else if (currentSection == "settings") {
+            com.example.ui.screens.SettingsScreen(
+                viewModel = viewModel,
+                onBack = { currentSection = "home" },
+            )
         } else {
             FinancialApp(
                 onOpenDrawer = { scope.launch { drawerState.open() } },
-                onGoHome = { currentSection = "home" }
+                onGoHome = { currentSection = "home" },
+                onToggleTheme = {
+                    val current = viewModel.themeMode.value
+                    viewModel.setThemeMode(if (current == 2) 1 else if (current == 1) 0 else 2)
+                },
+                isDarkTheme = viewModel.themeMode.value != 1,
             )
         }
     }
@@ -163,7 +188,7 @@ fun MainApp(viewModel: CalculatorViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FinancialApp(onOpenDrawer: () -> Unit, onGoHome: () -> Unit) {
+fun FinancialApp(onOpenDrawer: () -> Unit, onGoHome: () -> Unit, onToggleTheme: () -> Unit, isDarkTheme: Boolean) {
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -171,25 +196,28 @@ fun FinancialApp(onOpenDrawer: () -> Unit, onGoHome: () -> Unit) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { 
                     Text(
-                        "Financial Calc", 
-                        style = MaterialTheme.typography.headlineSmall.copy(
+                        "Financial Calculator", 
+                        style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            shadow = Shadow(
-                                color = Color.Black,
-                                blurRadius = 4f
-                            )
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     ) 
                 },
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 actions = {
+                    IconButton(onClick = onToggleTheme) {
+                        Icon(
+                            imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = "Toggle theme",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                     IconButton(onClick = onGoHome) {
-                        Icon(Icons.Default.Home, contentDescription = "Back to Home", tint = Color.White)
+                        Icon(Icons.Default.Home, contentDescription = "Back to Home", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             )
@@ -230,16 +258,16 @@ fun HomeApp(viewModel: CalculatorViewModel, onOpenDrawer: () -> Unit) {
                                 .fillMaxWidth()
                                 .windowInsetsPadding(WindowInsets(0, 0, 0, 0))
                                 .clip(RoundedCornerShape(32.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
                         ) {
                             NavigationBarItem(
                                 icon = { Icon(Icons.Default.Calculate, contentDescription = "Calculator") },
-                                label = { Text("Calculator", color = if (currentDestination?.hierarchy?.any { it.route == "calculator" } == true) Color.White else Color.White.copy(alpha = 0.6f)) },
+                                label = { Text("Calculator", color = if (currentDestination?.hierarchy?.any { it.route == "calculator" } == true) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) },
                                 selected = currentDestination?.hierarchy?.any { it.route == "calculator" } == true,
                                 colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = Color.White.copy(alpha = 0.2f),
-                                    selectedIconColor = Color.White,
-                                    unselectedIconColor = Color.White.copy(alpha = 0.6f)
+                                    indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 ),
                                 onClick = {
                                     navController.navigate("calculator") {
@@ -251,12 +279,12 @@ fun HomeApp(viewModel: CalculatorViewModel, onOpenDrawer: () -> Unit) {
                             )
                             NavigationBarItem(
                                 icon = { Icon(Icons.Default.Folder, contentDescription = "Ledgers") },
-                                label = { Text("Ledgers", color = if (currentDestination?.hierarchy?.any { it.route == "groups" } == true) Color.White else Color.White.copy(alpha = 0.6f)) },
+                                label = { Text("Ledgers", color = if (currentDestination?.hierarchy?.any { it.route == "groups" } == true) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) },
                                 selected = currentDestination?.hierarchy?.any { it.route == "groups" } == true,
                                 colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = Color.White.copy(alpha = 0.2f),
-                                    selectedIconColor = Color.White,
-                                    unselectedIconColor = Color.White.copy(alpha = 0.6f)
+                                    indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 ),
                                 onClick = {
                                     navController.navigate("groups") {
@@ -268,12 +296,12 @@ fun HomeApp(viewModel: CalculatorViewModel, onOpenDrawer: () -> Unit) {
                             )
                             NavigationBarItem(
                                 icon = { Icon(Icons.Default.History, contentDescription = "History") },
-                                label = { Text("History", color = if (currentDestination?.hierarchy?.any { it.route == "history" } == true) Color.White else Color.White.copy(alpha = 0.6f)) },
+                                label = { Text("History", color = if (currentDestination?.hierarchy?.any { it.route == "history" } == true) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) },
                                 selected = currentDestination?.hierarchy?.any { it.route == "history" } == true,
                                 colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = Color.White.copy(alpha = 0.2f),
-                                    selectedIconColor = Color.White,
-                                    unselectedIconColor = Color.White.copy(alpha = 0.6f)
+                                    indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 ),
                                 onClick = {
                                     navController.navigate("history") {

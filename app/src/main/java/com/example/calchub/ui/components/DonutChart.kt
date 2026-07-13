@@ -140,7 +140,7 @@ fun DonutChart(
                 Text(
                     text = "Total",
                     style = MaterialTheme.typography.labelLarge,
-                    color = NeonText.copy(alpha = 0.7f)
+                    color = NeonText.copy(alpha = 0.7f),
                 )
                 Text(
                     text = formatTotal(total),

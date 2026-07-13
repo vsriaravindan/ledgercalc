@@ -83,7 +83,7 @@ fun GlobalHistoryScreen(
     ) { padding ->
         if (history.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No history yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No history yet.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
         } else {
             LazyColumn(
@@ -104,7 +104,7 @@ fun GlobalHistoryScreen(
                                 onLongClick = { selectedHistoryItemForGroup = item }
                             ),
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                         color = MaterialTheme.colorScheme.surface
                     ) {
                         ListItem(

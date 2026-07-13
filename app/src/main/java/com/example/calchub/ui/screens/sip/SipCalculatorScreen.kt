@@ -35,11 +35,29 @@ fun SipCalculatorScreen(onBackClick: () -> Unit) {
     var timePeriodYears by remember { mutableDoubleStateOf(10.0) }
 
     val results = CalculatorLogic.calculateSIP(monthlyInvestment, expectedReturnRate, timePeriodYears)
+    val shareContent = remember(results) {
+        "📊 SIP Calculation\n" +
+        "Monthly: ₹${monthlyInvestment.toInt()}\n" +
+        "Rate: ${expectedReturnRate}%\n" +
+        "Period: ${timePeriodYears.toInt()} years\n" +
+        "Invested: ₹${results.first.toInt()}\n" +
+        "Returns: ₹${results.second.toInt()}\n" +
+        "Total: ₹${results.third.toInt()}"
+    }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     CalculatorScaffold(
         title = "SIP Calculator",
         onBackClick = onBackClick,
-        calculatorId = "sip"
+        calculatorId = "sip",
+        onShare = {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_TEXT, shareContent)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share SIP Result"))
+        },
+        shareContent = shareContent,
     ) { innerPadding ->
         Column(
             modifier = Modifier

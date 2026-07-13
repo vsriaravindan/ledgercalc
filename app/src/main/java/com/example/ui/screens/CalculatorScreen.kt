@@ -25,7 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.CalculatorViewModel
 import com.example.ui.components.CalculatorDisplay
 import com.example.ui.components.CalculatorPad
-import com.example.ui.theme.CalcDarkSurface
+import com.example.ui.components.ScientificPad
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,16 +61,20 @@ fun CalculatorScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp) // Main bento padding
+            .padding(12.dp)
     ) {
-        // Calculator Bento Card
+        // Calculator Card
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(24.dp))
-                .background(CalcDarkSurface)
-                .border(1.dp, androidx.compose.ui.graphics.Color(0x33FFFFFF), RoundedCornerShape(24.dp))
-                .padding(24.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                    RoundedCornerShape(20.dp),
+                )
+                .padding(16.dp)
         ) {
             val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -84,7 +88,7 @@ fun CalculatorScreen(
                 }
                 Row {
                     IconButton(onClick = { showScientific = !showScientific }) {
-                        Icon(Icons.Default.List, contentDescription = "Scientific Mode", tint = if (showScientific) com.example.ui.theme.BentoPrimary else Color.White)
+                        Icon(Icons.Default.List, contentDescription = "Scientific Mode", tint = if (showScientific) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                     }
                     IconButton(onClick = { viewModel.undo() }) {
                         Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = Color.White)
@@ -108,13 +112,13 @@ fun CalculatorScreen(
                 isError = calcError,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(if (showScientific) 0.5f else 1f)
+                    .weight(if (showScientific) 0.7f else 1.2f)
             )
             
             if (showScientific) {
-                com.example.ui.components.ScientificPad(
+                ScientificPad(
                     onInput = { viewModel.onInput(it) },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
             
@@ -128,7 +132,7 @@ fun CalculatorScreen(
                         showSaveDialog = true
                     }
                 },
-                modifier = Modifier.fillMaxWidth().weight(1.5f)
+                modifier = Modifier.fillMaxWidth().weight(2.5f)
             )
         }
     }

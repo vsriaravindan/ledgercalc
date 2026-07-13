@@ -106,8 +106,6 @@ fun GroupDetailScreen(
                                 )
                                 isExporting = false
                                 if (filePath != null) {
-                                    android.widget.Toast.makeText(context, "Saved: $filePath", android.widget.Toast.LENGTH_LONG).show()
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
                                     val uri = if (filePath.startsWith("content://")) {
                                         android.net.Uri.parse(filePath)
                                     } else {
@@ -117,13 +115,14 @@ fun GroupDetailScreen(
                                             java.io.File(filePath)
                                         )
                                     }
-                                    intent.setDataAndType(uri, "application/pdf")
-                                    intent.flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "No PDF viewer found", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "PDF saved ✓", android.widget.Toast.LENGTH_SHORT).show()
+                                    // Share via Android share sheet
+                                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/pdf"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
+                                    context.startActivity(android.content.Intent.createChooser(shareIntent, "Share PDF"))
                                 } else {
                                     android.widget.Toast.makeText(context, "Failed to generate PDF", android.widget.Toast.LENGTH_SHORT).show()
                                 }
@@ -165,13 +164,13 @@ fun GroupDetailScreen(
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Balance Header
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(24.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 2.dp
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                shadowElevation = 4.dp
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -183,12 +182,12 @@ fun GroupDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(percent = 50)
                         ) {
                             Text(
                                 "ACTIVE GROUP",
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -212,8 +211,8 @@ fun GroupDetailScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "Running Balance",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     val isInteger = balance % 1.0 == 0.0
                     val balStr = if (isInteger) balance.toLong().toString() else String.format("%.2f", balance)
@@ -221,7 +220,7 @@ fun GroupDetailScreen(
                         text = (if (balance >= 0) currency else "-$currency") + if (balance >= 0) balStr else balStr.drop(1),
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -234,7 +233,7 @@ fun GroupDetailScreen(
                 items(sortedTransactions, key = { it.id }) { tx ->
                     val isInteger = tx.amount % 1.0 == 0.0
                     val amountStr = if (isInteger) tx.amount.toLong().toString() else String.format("%.2f", tx.amount)
-                    val color = if (tx.amount >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    val color = if (tx.amount >= 0) com.example.ui.theme.GlowTeal else MaterialTheme.colorScheme.error
                     
                     Surface(
                         modifier = Modifier
@@ -245,7 +244,7 @@ fun GroupDetailScreen(
                                 onLongClick = { showEditDialog = tx }
                             ),
                         shape = RoundedCornerShape(24.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                         color = MaterialTheme.colorScheme.surface
                     ) {
                         ListItem(
@@ -313,6 +312,7 @@ fun GroupDetailScreen(
             var amountStr by remember { mutableStateOf(if (isEdit) showEditDialog?.amount?.toString() ?: "" else "") }
             var note by remember { mutableStateOf(if (isEdit) showEditDialog?.label ?: "" else "") }
             var amountError by remember { mutableStateOf(false) }
+            val txExpression = showEditDialog?.expression ?: ""
             
             fun validateAndSave() {
                 val amt = amountStr.toDoubleOrNull()
@@ -338,6 +338,19 @@ fun GroupDetailScreen(
                 title = { Text(if (isEdit) "Edit Entry" else "Manual Entry") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (isEdit && txExpression.isNotEmpty()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text(
+                                    text = txExpression,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(12.dp),
+                                )
+                            }
+                        }
                         OutlinedTextField(
                             value = amountStr,
                             onValueChange = { amountStr = it; amountError = false },

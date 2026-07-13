@@ -1,47 +1,30 @@
 package com.example.ui.theme
+
 import androidx.compose.ui.graphics.Color
 
-val BentoPrimary = Color(0xFF60A5FA)
-val BentoOnPrimary = Color(0xFFFFFFFF)
-val BentoPrimaryContainer = Color(0x3360A5FA)
-val BentoOnPrimaryContainer = Color(0xFFDBEAFE)
+// ── Brand Palette ──────────────────────────────────────────
+val GlassPrimary = Color(0xFF7C3AED)       // Violet
+val GlassPrimaryLight = Color(0xFFA78BFA)  // Lighter violet
+val GlassPrimaryDark = Color(0xFF5B21B6)   // Darker violet
+val GlowTeal = Color(0xFF14B8A6)           // Teal accent (positive)
+val GlowRose = Color(0xFFF43F5E)           // Rose accent (negative/error)
+val GlowAmber = Color(0xFFF59E0B)          // Amber (warning)
 
-val BentoBackground = Color.Transparent
-val BentoOnBackground = Color(0xFFF8FAFC)
-val BentoSurface = Color(0x1AFFFFFF)
-val BentoOnSurface = Color(0xFFF8FAFC)
-val BentoSurfaceVariant = Color(0x1AFFFFFF)
-val BentoOnSurfaceVariant = Color(0xFFCBD5E1)
-val BentoOutline = Color(0x33FFFFFF)
-val BentoOutlineVariant = Color(0x1AFFFFFF)
+// ── Surfaces ───────────────────────────────────────────────
+val GlassBgDark = Color(0xFF0F0D1A)        // Deepest bg
+val GlassBgCard = Color(0xFF1E1B2E)        // Card/surface
+val GlassBgElevated = Color(0xFF2A2740)    // Elevated surface
+val GlassBorder = Color(0xFF3D3A5C)        // Subtle border
+val GlassBorderLight = Color(0xFF5A5780)   // Brighter border
 
-val BentoError = Color(0xFFEF4444)
-val BentoOnError = Color(0xFFFFFFFF)
-val BentoErrorContainer = Color(0x33EF4444)
-val BentoOnErrorContainer = Color(0xFFFEE2E2)
+// ── Text ───────────────────────────────────────────────────
+val GlassTextPrimary = Color(0xFFF1F0FF)   // Near-white
+val GlassTextSecondary = Color(0xFFA5A3C0) // Muted
+val GlassTextDim = Color(0xFF6B6990)       // Very dim
 
-val BentoDarkPrimary = Color(0xFF60A5FA)
-val BentoDarkOnPrimary = Color(0xFFFFFFFF)
-val BentoDarkPrimaryContainer = Color(0x3360A5FA)
-val BentoDarkOnPrimaryContainer = Color(0xFFDBEAFE)
-
-val BentoDarkBackground = Color.Transparent
-val BentoDarkOnBackground = Color(0xFFF8FAFC)
-val BentoDarkSurface = Color(0x1AFFFFFF)
-val BentoDarkOnSurface = Color(0xFFF8FAFC)
-val BentoDarkSurfaceVariant = Color(0x1AFFFFFF)
-val BentoDarkOnSurfaceVariant = Color(0xFFCBD5E1)
-val BentoDarkOutline = Color(0x33FFFFFF)
-val BentoDarkOutlineVariant = Color(0x1AFFFFFF)
-
-val BentoDarkError = Color(0xFFEF4444)
-val BentoDarkOnError = Color(0xFFFFFFFF)
-val BentoDarkErrorContainer = Color(0x33EF4444)
-val BentoDarkOnErrorContainer = Color(0xFFFEE2E2)
-
-// Calculator specific colors
-val CalcDarkSurface = Color(0x1AFFFFFF)
-val CalcOperatorBg = Color(0x1AFFFFFF)
-val CalcOperatorContent = Color(0xFF93C5FD)
-val CalcNumberBg = Color(0x0DFFFFFF)
-val CalcNumberContent = Color(0xFFFFFFFF)
+// ── Calculator Specific ────────────────────────────────────
+val CalcGlassBg = Color(0x1AFFFFFF)        // Glass button bg
+val CalcGlassBgPressed = Color(0x33FFFFFF)  // Glass pressed
+val CalcOperatorBg = Color(0x267C3AED)     // Operator tint
+val CalcEqualsBg = Color(0xFF7C3AED)       // Equals filled
+val CalcDisplayBg = Color(0xFF1A1730)      // Display area

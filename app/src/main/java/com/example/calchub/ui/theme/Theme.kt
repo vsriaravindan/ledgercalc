@@ -5,47 +5,52 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
     primary = NeonGreen,
-    onPrimary = NeoBlack,
+    onPrimary = Color.White,
     secondary = NeonPink,
-    onSecondary = NeoBlack,
+    onSecondary = Color.White,
     tertiary = NeonCyan,
-    onTertiary = NeoBlack,
     background = NeonBackground,
     onBackground = NeonText,
     surface = NeonSurface,
     onSurface = NeonText,
-    surfaceVariant = NeonBorder,
+    surfaceVariant = Color(0xFF2A2740),
     onSurfaceVariant = NeonTextSecondary,
-    outline = NeonGreen
+    outline = NeonBorder,
+    outlineVariant = Color(0xFF5A5780),
 )
 
-// NeoPOP is predominantly dark, so we use the same scheme for light mode 
-// or a high-contrast version. For now, let's enforce the dark aesthetic.
-private val LightColorScheme = DarkColorScheme
+private val LightColorScheme = lightColorScheme(
+    primary = Color(0xFF0D9488),   // darker teal
+    onPrimary = Color.White,
+    secondary = Color(0xFF6D28D9), // violet
+    onSecondary = Color.White,
+    tertiary = Color(0xFF7C3AED),
+    background = Color(0xFFF8FAFC),
+    onBackground = Color(0xFF0F172A),
+    surface = Color.White,
+    onSurface = Color(0xFF0F172A),
+    surfaceVariant = Color(0xFFF1F5F9),
+    onSurfaceVariant = Color(0xFF475569),
+    outline = Color(0xFFCBD5E1),
+    outlineVariant = Color(0xFFE2E8F0),
+)
 
-/**
- * Custom Theme for CalcHub application.
- * Wraps [MaterialTheme] with specific colors and typography.
- *
- * @param darkTheme Whether to use dark theme (default: system setting).
- * @param dynamicColor Whether to use dynamic color (Android 12+) (default: false to enforce NeoPop).
- * @param content The content to display inside the theme.
- */
 @Composable
 fun CalcHubTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    // We default to false to enforce NeoPOP branding
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -57,17 +62,20 @@ fun CalcHubTheme(
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
+            window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color.Transparent.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
-        content = content
+        typography = com.example.ui.theme.AppTypography,
+        content = content,
     )
 }

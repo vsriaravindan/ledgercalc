@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -86,9 +85,19 @@ fun HomeScreen(onCalculatorClick: (String) -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                        )
+                    )
+                )
                 .padding(horizontal = 16.dp)
                 .statusBarsPadding()
-                .padding(top = 16.dp, bottom = 24.dp) // Add some bottom padding for the gradient fade
+                .padding(top = 16.dp, bottom = 32.dp)
         ) {
             // Header
             Row(
@@ -96,35 +105,27 @@ fun HomeScreen(onCalculatorClick: (String) -> Unit) {
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp)
+                    .padding(vertical = 12.dp)
             ) {
                 Text(
                     text = "Calc",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        shadow = Shadow(
-                            color = Color.White,
-                            blurRadius = 20f
-                        )
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 )
                 Text(
                     text = "Hub",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        shadow = Shadow(
-                            color = Color.White,
-                            blurRadius = 20f
-                        )
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(
                     imageVector = Icons.Default.Calculate,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -149,9 +150,7 @@ fun HomeScreen(onCalculatorClick: (String) -> Unit) {
 fun CalculatorCard(calculator: Calculator, onClick: (String) -> Unit) {
     NeonCard(
         modifier = Modifier.aspectRatio(0.65f),
-        onClick = { onClick(calculator.route) },
-        
-        useGradientBorder = true
+        onClick = { onClick(calculator.route) }
     ) {
         // This Column's arrangement is now in full control.
         Column(
@@ -168,11 +167,12 @@ fun CalculatorCard(calculator: Calculator, onClick: (String) -> Unit) {
                 // The size of this box will now be determined by its children.
             ) {
                 // The Canvas defines the glow area.
+                val glowColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                 Canvas(modifier = Modifier.size(56.dp)) {
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.3f),
+                                glowColor,
                                 Color.Transparent
                             )
                         )
@@ -182,7 +182,7 @@ fun CalculatorCard(calculator: Calculator, onClick: (String) -> Unit) {
                 Icon(
                     imageVector = calculator.icon,
                     contentDescription = calculator.name,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -195,7 +195,7 @@ fun CalculatorCard(calculator: Calculator, onClick: (String) -> Unit) {
                     fontWeight = FontWeight.Bold
                 ),
                 textAlign = TextAlign.Center,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 minLines = 2
             )

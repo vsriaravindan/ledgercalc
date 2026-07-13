@@ -47,6 +47,7 @@ data class TransactionEntry(
     val groupId: Int,
     val amount: Double,
     val label: String = "",
+    val expression: String = "",
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -107,9 +108,15 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE transaction_entry ADD COLUMN expression TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 @Database(
     entities = [GlobalHistory::class, LedgerGroup::class, TransactionEntry::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

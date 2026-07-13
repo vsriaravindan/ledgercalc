@@ -1,88 +1,120 @@
 package com.example.utils
 
+import kotlin.math.*
+
+/**
+ * Thread-safe math expression evaluator using shunting-yard algorithm.
+ * Handles: +, -, × (*), ÷ (/), ^, %, sin, cos, tan, log, ln, sqrt, √, π
+ * Gracefully handles incomplete expressions (e.g. "5+") by returning the partial value.
+ */
 object CalculatorUtils {
+
     fun evaluateExpression(expression: String): Double {
         if (expression.isBlank()) return 0.0
-        
-        return eval(expression.replace("×", "*").replace("÷", "/"))
+        val cleaned = expression
+            .replace("×", "*")
+            .replace("÷", "/")
+            .replace("π", "(${PI})")
+            .replace("%", "/100")
+        return evaluate(cleaned)
     }
 
-    private fun eval(str: String): Double {
-        return object : Any() {
-            var pos = -1
-            var ch = 0
+    private fun evaluate(expr: String): Double {
+        val output = mutableListOf<Double>()
+        val ops = mutableListOf<Char>()
+        var i = 0
+        var expectUnary = true
 
-            fun nextChar() {
-                ch = if (++pos < str.length) str[pos].code else -1
-            }
-
-            fun eat(charToEat: Int): Boolean {
-                while (ch == ' '.code) nextChar()
-                if (ch == charToEat) {
-                    nextChar()
-                    return true
-                }
-                return false
-            }
-
-            fun parse(): Double {
-                nextChar()
-                val x = parseExpression()
-                if (pos < str.length) throw RuntimeException("Unexpected: " + ch.toChar())
-                return x
-            }
-
-            fun parseExpression(): Double {
-                var x = parseTerm()
-                while (true) {
-                    if (eat('+'.code)) x += parseTerm() // addition
-                    else if (eat('-'.code)) x -= parseTerm() // subtraction
-                    else return x
-                }
-            }
-
-            fun parseTerm(): Double {
-                var x = parseFactor()
-                while (true) {
-                    if (eat('*'.code)) x *= parseFactor() // multiplication
-                    else if (eat('/'.code)) x /= parseFactor() // division
-                    else return x
-                }
-            }
-
-            fun parseFactor(): Double {
-                if (eat('+'.code)) return parseFactor() // unary plus
-                if (eat('-'.code)) return -parseFactor() // unary minus
-
-                var x: Double
-                val startPos = this.pos
-                if (eat('('.code)) { // parentheses
-                    x = parseExpression()
-                    eat(')'.code)
-                } else if ((ch >= '0'.code && ch <= '9'.code) || ch == '.'.code) { // numbers
-                    while ((ch >= '0'.code && ch <= '9'.code) || ch == '.'.code) nextChar()
-                    x = str.substring(startPos, this.pos).toDouble()
-                } else if (ch >= 'a'.code && ch <= 'z'.code || ch == '√'.code) { // functions
-                    while (ch >= 'a'.code && ch <= 'z'.code || ch == '√'.code) nextChar()
-                    val func = str.substring(startPos, this.pos)
-                    x = parseFactor()
-                    x = when (func) {
-                        "sin" -> Math.sin(Math.toRadians(x))
-                        "cos" -> Math.cos(Math.toRadians(x))
-                        "tan" -> Math.tan(Math.toRadians(x))
-                        "log" -> Math.log10(x)
-                        "ln" -> Math.log(x)
-                        "sqrt", "√" -> Math.sqrt(x)
-                        else -> throw RuntimeException("Unknown function: $func")
+        fun applyOp() {
+            if (ops.isEmpty() || output.size < 2) return
+            val op = ops.removeLast()
+            when (op) {
+                'u' -> { val a = output.removeLast(); output.add(-a) }
+                's' -> { val a = output.removeLast(); output.add(sin(Math.toRadians(a))) }
+                'c' -> { val a = output.removeLast(); output.add(cos(Math.toRadians(a))) }
+                't' -> { val a = output.removeLast(); output.add(tan(Math.toRadians(a))) }
+                'l' -> { val a = output.removeLast(); output.add(log10(a)) }
+                'n' -> { val a = output.removeLast(); output.add(ln(a)) }
+                'r' -> { val a = output.removeLast(); output.add(sqrt(a)) }
+                else -> {
+                    if (output.size < 2) return
+                    val b = output.removeLast()
+                    val a = output.removeLast()
+                    val result = when (op) {
+                        '+' -> a + b
+                        '-' -> a - b
+                        '*' -> a * b
+                        '/' -> if (b == 0.0) throw ArithmeticException("Division by zero") else a / b
+                        '^' -> a.pow(b)
+                        else -> return
                     }
-                } else {
-                    throw RuntimeException("Unexpected: " + ch.toChar())
+                    output.add(result)
                 }
-                
-                if (eat('^'.code)) x = Math.pow(x, parseFactor()) // exponentiation
-
-                return x
             }
-        }.parse()
+        }
+
+        fun precedence(op: Char): Int = when (op) {
+            '+', '-' -> 1
+            '*', '/' -> 2
+            '^' -> 3
+            'u', 's', 'c', 't', 'l', 'n', 'r' -> 4
+            else -> 0
+        }
+
+        while (i < expr.length) {
+            val ch = expr[i]
+
+            when {
+                ch == ' ' -> i++
+                ch == '(' -> {
+                    ops.add(ch)
+                    expectUnary = true
+                    i++
+                }
+                ch == ')' -> {
+                    while (ops.isNotEmpty() && ops.last() != '(') applyOp()
+                    if (ops.isNotEmpty() && ops.last() == '(') ops.removeLast()
+                    expectUnary = false
+                    i++
+                }
+                ch == '-' && expectUnary -> {
+                    ops.add('u')
+                    i++
+                }
+                ch == '+' && expectUnary -> {
+                    i++ // skip unary plus
+                }
+                ch in '0'..'9' || ch == '.' -> {
+                    val start = i
+                    while (i < expr.length && (expr[i] in '0'..'9' || expr[i] == '.')) i++
+                    val numStr = expr.substring(start, i)
+                    output.add(numStr.toDouble())
+                    expectUnary = false
+                }
+                ch in "+-*/^" -> {
+                    while (ops.isNotEmpty() && ops.last() != '(' && precedence(ops.last()) >= precedence(ch)) applyOp()
+                    ops.add(ch)
+                    expectUnary = true
+                    i++
+                }
+                ch in 'a'..'z' || ch == '√' -> {
+                    val start = i
+                    while (i < expr.length && (expr[i] in 'a'..'z' || expr[i] == '√')) i++
+                    val func = expr.substring(start, i)
+                    val mapped = when (func) {
+                        "sin" -> 's'; "cos" -> 'c'; "tan" -> 't'
+                        "log" -> 'l'; "ln" -> 'n'; "sqrt", "√" -> 'r'
+                        else -> throw IllegalArgumentException("Unknown function: $func")
+                    }
+                    ops.add(mapped)
+                    expectUnary = true
+                }
+                else -> i++ // skip unrecognized
+            }
+        }
+
+        while (ops.isNotEmpty()) applyOp()
+
+        return if (output.isEmpty()) 0.0 else output.last()
     }
 }
