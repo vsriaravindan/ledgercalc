@@ -26,8 +26,20 @@ object CalculatorUtils {
         var expectUnary = true
 
         fun applyOp() {
-            if (ops.isEmpty() || output.size < 2) return
-            val op = ops.removeLast()
+            if (ops.isEmpty() || output.isEmpty()) return
+            val op = ops.last()
+            val needsTwo = op !in "usctlnr"
+            if (needsTwo && output.size < 2) {
+                // Binary op with insufficient operands — discard it
+                ops.removeLast()
+                return
+            }
+            if (!needsTwo && output.size < 1) {
+                // Unary op with no operand — discard it
+                ops.removeLast()
+                return
+            }
+            ops.removeLast()
             when (op) {
                 'u' -> { val a = output.removeLast(); output.add(-a) }
                 's' -> { val a = output.removeLast(); output.add(sin(Math.toRadians(a))) }
@@ -37,7 +49,6 @@ object CalculatorUtils {
                 'n' -> { val a = output.removeLast(); output.add(ln(a)) }
                 'r' -> { val a = output.removeLast(); output.add(sqrt(a)) }
                 else -> {
-                    if (output.size < 2) return
                     val b = output.removeLast()
                     val a = output.removeLast()
                     val result = when (op) {

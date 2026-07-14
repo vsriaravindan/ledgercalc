@@ -85,13 +85,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: CalculatorViewModel = viewModel()
             val themeMode by viewModel.themeMode.collectAsState()
+            val fontFamilyName by viewModel.fontFamily.collectAsState()
+            val selectedFontFamily = remember(fontFamilyName) {
+                com.example.ui.theme.AppFont.entries.firstOrNull { it.displayName == fontFamilyName }?.fontFamily
+                    ?: androidx.compose.ui.text.font.FontFamily.Default
+            }
             val isDark = when (themeMode) {
                 1 -> false
                 2 -> true
                 else -> isSystemInDarkTheme()
             }
                 
-            MyApplicationTheme(darkTheme = isDark, fontFamily = viewModel.selectedFontFamily) {
+            MyApplicationTheme(darkTheme = isDark, fontFamily = selectedFontFamily) {
                 com.example.ui.components.AppBackground {
                     MainApp(viewModel)
                 }
