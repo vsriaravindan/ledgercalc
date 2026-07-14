@@ -90,7 +90,7 @@ interface CalculatorDao {
     fun getGroupBalance(groupId: Int): Flow<Double?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTransaction(transaction: TransactionEntry)
+    suspend fun insertTransaction(transaction: TransactionEntry): Long
 
     @Update
     suspend fun updateTransaction(transaction: TransactionEntry)

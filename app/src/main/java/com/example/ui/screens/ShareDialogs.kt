@@ -226,10 +226,12 @@ fun JoinFolderDialog(
                                 isJoining = false
                                 if (result.isSuccess) {
                                     val resp = result.getOrThrow()
-                                    // Create a local group with the shared folder's name
-                                    viewModel.createGroup(resp.folder.folderName, 0xFF7C3AED)
-                                    // We'll handle the mapping in the success callback
-                                    onFolderJoined(resp.folder.localFolderId.toInt(), resp.folder.id)
+                                    // Create local group with callback to get the new ID
+                                    viewModel.createGroup(resp.folder.folderName, 0xFF7C3AED) { newGroupId ->
+                                        // Map the new local group to the shared folder
+                                        viewModel.saveSharedFolderMapping(newGroupId, resp.folder.id)
+                                        onFolderJoined(newGroupId, resp.folder.id)
+                                    }
                                     onDismiss()
                                     android.widget.Toast.makeText(context, "Joined! Shared ledger added.", android.widget.Toast.LENGTH_LONG).show()
                                 } else {

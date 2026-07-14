@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,7 +55,7 @@ fun GroupDetailScreen(
         viewModel.setActiveGroup(groupId)
         if (sharedFolderId != null) {
             viewModel.setSharedFolderInfo(sharedFolderId)
-            viewModel.loadSharedEntries(sharedFolderId)
+            viewModel.loadSyncEvents(sharedFolderId)
         }
     }
 
@@ -63,7 +64,6 @@ fun GroupDetailScreen(
     val balance by viewModel.activeGroupBalance.collectAsStateWithLifecycle()
     val currency by viewModel.currencySymbol.collectAsStateWithLifecycle()
     val syncEvents by viewModel.syncEvents.collectAsStateWithLifecycle()
-    val sharedEntries by viewModel.sharedEntries.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
@@ -96,15 +96,14 @@ fun GroupDetailScreen(
     var isExporting by remember { mutableStateOf(false) }
     val includeWatermark by viewModel.includeWatermark.collectAsStateWithLifecycle()
 
-    // ── Build merged list: transactions + audit chips ──
-    val mergedItems = remember(sortedTransactions, syncEvents) {
+    // ── Build merged list: local transactions + filtered audit events ──
+    val filteredEvents = remember(syncEvents, sharedFolderId) {
+        syncEvents.filter { it.sharedFolderId == (sharedFolderId ?: 0L) }
+    }
+    val mergedItems = remember(sortedTransactions, filteredEvents) {
         val items = mutableListOf<Any>()
-        val txIds = sortedTransactions.map { it.id }.toSet()
-        // Add transactions
         items.addAll(sortedTransactions)
-        // Add sync events that don't match a current transaction
-        val recentEvents = syncEvents.filter { it.eventType != "added" }
-        items.addAll(recentEvents)
+        items.addAll(filteredEvents.filter { it.eventType != "added" })
         items
     }
 
@@ -128,12 +127,11 @@ fun GroupDetailScreen(
                     }
                 },
                 actions = {
-                    // Pull to refresh button
                     if (isShared) {
                         IconButton(onClick = {
-                            sharedFolderId?.let { viewModel.refreshSharedData(it) }
+                            sharedFolderId?.let { viewModel.refreshSyncEvents(it) }
                         }) {
-                            Icon(Icons.Default.Folder, contentDescription = "Refresh")
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
                     }
                     IconButton(onClick = {
@@ -193,48 +191,34 @@ fun GroupDetailScreen(
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     SmallFloatingActionButton(
                         onClick = {
-                            if (canEdit) {
-                                showAddDialog = true
-                            } else {
-                                android.widget.Toast.makeText(context, "Connect to internet to edit shared ledger", android.widget.Toast.LENGTH_SHORT).show()
-                            }
+                            if (canEdit) showAddDialog = true
+                            else android.widget.Toast.makeText(context, "Connect to internet to edit shared ledger", android.widget.Toast.LENGTH_SHORT).show()
                         }
-                    ) {
-                        Icon(Icons.Default.Dialpad, contentDescription = "Use Calculator")
-                    }
+                    ) { Icon(Icons.Default.Dialpad, contentDescription = "Use Calculator") }
                     FloatingActionButton(
                         onClick = {
-                            if (canEdit) {
-                                showManualAddDialog = true
-                            } else {
-                                android.widget.Toast.makeText(context, "Connect to internet to edit shared ledger", android.widget.Toast.LENGTH_SHORT).show()
-                            }
+                            if (canEdit) showManualAddDialog = true
+                            else android.widget.Toast.makeText(context, "Connect to internet to edit shared ledger", android.widget.Toast.LENGTH_SHORT).show()
                         }
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Entry")
-                    }
+                    ) { Icon(Icons.Default.Add, contentDescription = "Add Entry") }
                 }
             }
         },
         modifier = modifier
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Read-only banner
             if (isReadOnly) {
                 Surface(
                     color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        "📖 Read-only — contact folder owner to edit",
+                    Text("📖 Read-only — contact folder owner to edit",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
+                        color = MaterialTheme.colorScheme.tertiary)
                 }
             }
 
-            // Syncing indicator
             if (isShared && isSyncing) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
@@ -242,72 +226,37 @@ fun GroupDetailScreen(
             // Balance Header
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
                 shape = RoundedCornerShape(24.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
                 shadowElevation = 4.dp
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(percent = 50)
-                        ) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.Start) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), shape = RoundedCornerShape(percent = 50)) {
                             Text(
                                 if (isShared) "SHARED GROUP" else "ACTIVE GROUP",
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                            )
+                                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                         }
                         group?.color?.let { groupColor ->
-                            Surface(
-                                color = androidx.compose.ui.graphics.Color(groupColor.toInt()).copy(alpha = 0.2f),
-                                shape = androidx.compose.foundation.shape.CircleShape,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = androidx.compose.ui.graphics.Color(groupColor.toInt()),
-                                    modifier = Modifier.padding(8.dp)
-                                )
+                            Surface(color = androidx.compose.ui.graphics.Color(groupColor.toInt()).copy(alpha = 0.2f),
+                                shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = androidx.compose.ui.graphics.Color(groupColor.toInt()), modifier = Modifier.padding(8.dp))
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Running Balance",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text("Running Balance", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     val isInteger = balance % 1.0 == 0.0
                     val balStr = if (isInteger) balance.toLong().toString() else String.format("%.2f", balance)
-                    Text(
-                        text = (if (balance >= 0) currency else "-$currency") + if (balance >= 0) balStr else balStr.drop(1),
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Text(text = (if (balance >= 0) currency else "-$currency") + if (balance >= 0) balStr else balStr.drop(1),
+                        style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
             // History List
-            LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                // If shared, show audited entries with pull-to-refresh gesture
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 80.dp)) {
                 items(mergedItems) { item ->
                     when (item) {
                         is TransactionEntry -> {
@@ -316,19 +265,15 @@ fun GroupDetailScreen(
                             val color = if (item.amount >= 0) com.example.ui.theme.GlowTeal else MaterialTheme.colorScheme.error
 
                             Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .combinedClickable(
-                                        onClick = {},
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                                    .combinedClickable(onClick = {},
                                         onLongClick = {
                                             if (!isReadOnly) {
                                                 val canEdit = !isShared || viewModel.isOnline(context)
                                                 if (canEdit) showEditDialog = item
                                                 else android.widget.Toast.makeText(context, "Connect to internet to edit", android.widget.Toast.LENGTH_SHORT).show()
                                             }
-                                        }
-                                    ),
+                                        }),
                                 shape = RoundedCornerShape(24.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                                 color = MaterialTheme.colorScheme.surface
@@ -339,12 +284,8 @@ fun GroupDetailScreen(
                                     supportingContent = { Text(dateFormat.format(Date(item.timestamp))) },
                                     trailingContent = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = (if (item.amount > 0) "+" else "") + amtStr,
-                                                color = color,
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.titleMedium
-                                            )
+                                            Text(text = (if (item.amount > 0) "+" else "") + amtStr, color = color,
+                                                fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                             Spacer(Modifier.width(8.dp))
                                             IconButton(onClick = {
                                                 clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(amtStr))
@@ -364,12 +305,7 @@ fun GroupDetailScreen(
                             }
                         }
                         is SyncEvent -> {
-                            // Audit chip
-                            val icon = when (item.eventType) {
-                                "edited" -> "📝"
-                                "deleted" -> "🗑️"
-                                else -> "📌"
-                            }
+                            val icon = when (item.eventType) { "edited" -> "📝"; "deleted" -> "🗑️"; else -> "📌" }
                             val detail = when (item.eventType) {
                                 "edited" -> {
                                     val oldAmt = item.oldAmount?.let { if (it % 1.0 == 0.0) it.toLong().toString() else String.format("%.2f", it) } ?: ""
@@ -383,19 +319,12 @@ fun GroupDetailScreen(
                                 else -> ""
                             }
                             if (detail.isNotBlank()) {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 24.dp, vertical = 4.dp),
+                                Surface(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                ) {
-                                    Text(
-                                        text = "$icon $detail",
-                                        style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) {
+                                    Text(text = "$icon $detail", style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    )
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
                                 }
                             }
                         }
@@ -404,6 +333,7 @@ fun GroupDetailScreen(
             }
         }
 
+        // Delete confirm
         if (transactionToDelete != null) {
             AlertDialog(
                 onDismissRequest = { transactionToDelete = null },
@@ -412,42 +342,39 @@ fun GroupDetailScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         val txId = transactionToDelete!!
-                        if (isShared && sharedFolderId != null) {
-                            val tx = transactions.find { it.id == txId }
-                            coroutineScope.launch {
-                                if (tx != null) {
-                                    SharedFolderRepository.syncDeleteEntry(
-                                        context, sharedFolderId, tx.id.toLong(),
-                                        tx.amount, tx.label, tx.expression
-                                    )
-                                }
-                                viewModel.deleteTransaction(txId)
-                                sharedFolderId?.let { viewModel.refreshSharedData(it) }
+                        val tx = transactions.find { it.id == txId }
+                        coroutineScope.launch {
+                            if (isShared && sharedFolderId != null && tx != null) {
+                                SharedFolderRepository.syncDeleteEntry(
+                                    context, sharedFolderId, tx.id.toLong(),
+                                    tx.amount, tx.label, tx.expression
+                                )
                             }
-                        } else {
                             viewModel.deleteTransaction(txId)
+                            if (sharedFolderId != null) viewModel.refreshSyncEvents(sharedFolderId)
                         }
                         transactionToDelete = null
-                    }) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
+                    }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 },
-                dismissButton = {
-                    TextButton(onClick = { transactionToDelete = null }) { Text("Cancel") }
-                }
+                dismissButton = { TextButton(onClick = { transactionToDelete = null }) { Text("Cancel") } }
             )
         }
 
+        // Calculator bottom sheet
         if (showAddDialog) {
             ModalBottomSheet(
                 onDismissRequest = { showAddDialog = false },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 modifier = Modifier.fillMaxHeight(0.9f)
             ) {
-                CalculatorScreen(viewModel = viewModel, onSaveComplete = { showAddDialog = false })
+                CalculatorScreen(viewModel = viewModel, onSaveComplete = {
+                    showAddDialog = false
+                    if (sharedFolderId != null) viewModel.refreshSyncEvents(sharedFolderId)
+                })
             }
         }
 
+        // Manual add / Edit dialog
         if (showManualAddDialog || showEditDialog != null) {
             val isEdit = showEditDialog != null
             var amountStr by remember { mutableStateOf(if (isEdit) showEditDialog?.amount?.toString() ?: "" else "") }
@@ -457,10 +384,7 @@ fun GroupDetailScreen(
 
             fun validateAndSave() {
                 val amt = amountStr.toDoubleOrNull()
-                if (amt == null) {
-                    amountError = true
-                    return
-                }
+                if (amt == null) { amountError = true; return }
                 amountError = false
                 coroutineScope.launch {
                     if (isEdit) {
@@ -471,16 +395,11 @@ fun GroupDetailScreen(
                                 context, sharedFolderId, oldTx.id.toLong(),
                                 amt, note, oldTx.amount, oldTx.label, oldTx.expression
                             )
-                            viewModel.refreshSharedData(sharedFolderId)
+                            viewModel.refreshSyncEvents(sharedFolderId)
                         }
                     } else {
                         viewModel.addDirectEntry(groupId, amt, note)
-                        if (isShared && sharedFolderId != null) {
-                            SharedFolderRepository.syncAddEntry(
-                                context, sharedFolderId, amt, note, ""
-                            )
-                            viewModel.refreshSharedData(sharedFolderId)
-                        }
+                        if (sharedFolderId != null) viewModel.refreshSyncEvents(sharedFolderId)
                     }
                 }
                 showManualAddDialog = false
@@ -488,54 +407,25 @@ fun GroupDetailScreen(
             }
 
             AlertDialog(
-                onDismissRequest = {
-                    showManualAddDialog = false
-                    showEditDialog = null
-                },
+                onDismissRequest = { showManualAddDialog = false; showEditDialog = null },
                 title = { Text(if (isEdit) "Edit Entry" else "Manual Entry") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (isEdit && txExpression.isNotEmpty()) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Text(
-                                    text = txExpression,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(12.dp),
-                                )
+                            Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), shape = RoundedCornerShape(12.dp)) {
+                                Text(text = txExpression, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(12.dp))
                             }
                         }
-                        OutlinedTextField(
-                            value = amountStr,
-                            onValueChange = { amountStr = it; amountError = false },
-                            label = { Text("Amount (e.g. 50 or -20)") },
-                            isError = amountError,
+                        OutlinedTextField(value = amountStr, onValueChange = { amountStr = it; amountError = false },
+                            label = { Text("Amount (e.g. 50 or -20)") }, isError = amountError,
                             supportingText = if (amountError) {{ Text("Enter a valid number") }} else null,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = note,
-                            onValueChange = { note = it },
-                            label = { Text("Label") },
-                            singleLine = true
-                        )
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                        OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Label") }, singleLine = true)
                     }
                 },
-                confirmButton = {
-                    Button(onClick = { validateAndSave() }) {
-                        Text("Save")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        showManualAddDialog = false
-                        showEditDialog = null
-                    }) { Text("Cancel") }
-                }
+                confirmButton = { Button(onClick = { validateAndSave() }) { Text("Save") } },
+                dismissButton = { TextButton(onClick = { showManualAddDialog = false; showEditDialog = null }) { Text("Cancel") } }
             )
         }
     }

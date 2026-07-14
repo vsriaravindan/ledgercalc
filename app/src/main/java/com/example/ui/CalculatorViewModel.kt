@@ -13,6 +13,8 @@ import com.example.data.GlobalHistory
 import com.example.data.LedgerGroup
 import com.example.data.MIGRATION_1_2
 import com.example.data.TransactionEntry
+import com.example.sync.SharedFolderRepository
+import com.example.sync.SupabaseClient
 import com.example.utils.CalculatorUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class CalculatorViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -54,7 +57,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _currencySymbol = MutableStateFlow(prefs.getString("currency", "$") ?: "$")
     val currencySymbol: StateFlow<String> = _currencySymbol.asStateFlow()
 
-    private val _themeMode = MutableStateFlow(prefs.getInt("theme_mode", 0)) // 0=System, 1=Light, 2=Dark
+    private val _themeMode = MutableStateFlow(prefs.getInt("theme_mode", 0))
     val themeMode: StateFlow<Int> = _themeMode.asStateFlow()
 
     private val _includeWatermark = MutableStateFlow(prefs.getBoolean("include_watermark", true))
@@ -196,8 +199,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val groupId = _activeGroupId.value
 
             viewModelScope.launch {
+                val localEntryId: Long
                 if (groupId != null) {
-                    repository.insertTransaction(
+                    localEntryId = repository.insertTransaction(
                         TransactionEntry(
                             groupId = groupId,
                             amount = resVal,
@@ -205,6 +209,18 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                             expression = expr
                         )
                     )
+                    // If shared folder, sync to Supabase
+                    val sharedFolderId = getSharedFolderIdForGroup(groupId)
+                    if (sharedFolderId != null) {
+                        val context = getApplication<Application>()
+                        val result = SharedFolderRepository.syncAddEntry(
+                            context, sharedFolderId, resVal, note.ifEmpty { expr }, expr, localEntryId
+                        )
+                        if (result.isSuccess) {
+                            val sharedEntry = result.getOrThrow()
+                            saveEntrySyncMapping(groupId, localEntryId, sharedEntry.id)
+                        }
+                    }
                 } else {
                     repository.insertGlobalHistory(
                         GlobalHistory(
@@ -216,7 +232,6 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
             
-            // clear after save
             saveStateForUndo()
             _expression.value = ""
             _result.value = ""
@@ -226,7 +241,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     // Direct entry (without calculator)
     fun addDirectEntry(groupId: Int, amount: Double, label: String) {
         viewModelScope.launch {
-            repository.insertTransaction(
+            val localId = repository.insertTransaction(
                 TransactionEntry(
                     groupId = groupId,
                     amount = amount,
@@ -234,6 +249,17 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     expression = ""
                 )
             )
+            // If shared folder, sync to Supabase
+            val sharedFolderId = getSharedFolderIdForGroup(groupId)
+            if (sharedFolderId != null) {
+                val context = getApplication<Application>()
+                val result = SharedFolderRepository.syncAddEntry(
+                    context, sharedFolderId, amount, label, "", localId
+                )
+                if (result.isSuccess) {
+                    saveEntrySyncMapping(groupId, localId, result.getOrThrow().id)
+                }
+            }
         }
     }
 
@@ -244,7 +270,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private fun scheduleAutoSave() {
         autoSaveJob?.cancel()
         autoSaveJob = viewModelScope.launch {
-            delay(2000) // 2 seconds after last input
+            delay(2000)
             val expr = _expression.value
             val res = _result.value
             if (expr.isNotEmpty() && res.isNotEmpty()) {
@@ -297,10 +323,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
 
-        // If expression ends with operator, show the last number as preview
         val trailingOps = setOf('+', '-', '*', '/', '^', '×', '÷')
         if (expr.last() in trailingOps) {
-            // Extract the last number (token) after the last operator
             val parts = expr.split(Regex("[+\\-*/^×÷]"))
             val lastPart = parts.lastOrNull()?.trim() ?: ""
             _result.value = if (lastPart.isNotEmpty() && lastPart.toDoubleOrNull() != null) {
@@ -313,7 +337,6 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
 
-        // If expression ends with a decimal point, show it as-is
         if (expr.last() == '.') {
             _result.value = expr
             _calcError.value = false
@@ -337,9 +360,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Group Management
-    fun createGroup(name: String, color: Long) {
+    fun createGroup(name: String, color: Long, onCreated: ((Int) -> Unit)? = null) {
         viewModelScope.launch {
-            repository.insertGroup(LedgerGroup(name = name, color = color))
+            val id = repository.insertGroup(LedgerGroup(name = name, color = color))
+            onCreated?.invoke(id.toInt())
         }
     }
 
@@ -420,9 +444,6 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _sharedFolderPermission = MutableStateFlow("full")
     val sharedFolderPermission: StateFlow<String> = _sharedFolderPermission.asStateFlow()
 
-    private val _sharedEntries = MutableStateFlow<List<com.example.sync.SharedEntry>>(emptyList())
-    val sharedEntries: StateFlow<List<com.example.sync.SharedEntry>> = _sharedEntries.asStateFlow()
-
     private val _syncEvents = MutableStateFlow<List<com.example.sync.SyncEvent>>(emptyList())
     val syncEvents: StateFlow<List<com.example.sync.SyncEvent>> = _syncEvents.asStateFlow()
 
@@ -445,6 +466,33 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         sharedFolderPrefs.edit().remove("group_$groupId").apply()
     }
 
+    // Entry sync mapping: local_entry_id → shared_entry_id
+    private fun getEntrySyncMapKey(): String = "entry_sync_${_sharedFolderId.value ?: 0}"
+
+    fun getSharedEntryId(localEntryId: Long): Long? {
+        val mapJson = sharedFolderPrefs.getString(getEntrySyncMapKey(), "{}") ?: "{}"
+        val map = JSONObject(mapJson)
+        return if (map.has(localEntryId.toString())) map.getLong(localEntryId.toString()) else null
+    }
+
+    fun saveEntrySyncMapping(groupId: Int, localEntryId: Long, sharedEntryId: Long) {
+        val sfId = getSharedFolderIdForGroup(groupId) ?: return
+        val key = "entry_sync_$sfId"
+        val mapJson = sharedFolderPrefs.getString(key, "{}") ?: "{}"
+        val map = JSONObject(mapJson)
+        map.put(localEntryId.toString(), sharedEntryId)
+        sharedFolderPrefs.edit().putString(key, map.toString()).apply()
+    }
+
+    fun removeEntrySyncMapping(groupId: Int, localEntryId: Long) {
+        val sfId = getSharedFolderIdForGroup(groupId) ?: return
+        val key = "entry_sync_$sfId"
+        val mapJson = sharedFolderPrefs.getString(key, "{}") ?: "{}"
+        val map = JSONObject(mapJson)
+        map.remove(localEntryId.toString())
+        sharedFolderPrefs.edit().putString(key, map.toString()).apply()
+    }
+
     fun setSharedFolderInfo(sharedFolderId: Long?, permission: String = "full") {
         _sharedFolderId.value = sharedFolderId
         _sharedFolderPermission.value = permission
@@ -453,17 +501,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     fun clearSharedFolder() {
         _sharedFolderId.value = null
         _sharedFolderPermission.value = "full"
-        _sharedEntries.value = emptyList()
         _syncEvents.value = emptyList()
     }
 
-    fun loadSharedEntries(sharedFolderId: Long) {
+    fun loadSyncEvents(sharedFolderId: Long) {
         viewModelScope.launch {
             _isSyncing.value = true
-            val entries = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
-            if (entries.isSuccess) {
-                _sharedEntries.value = entries.getOrDefault(emptyList())
-            }
             val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
             if (events.isSuccess) {
                 _syncEvents.value = events.getOrDefault(emptyList())
@@ -487,8 +530,22 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 val folder = result.getOrThrow()
                 saveSharedFolderMapping(groupId, folder.id)
                 setSharedFolderInfo(folder.id, permission)
+                // Upload existing entries to Supabase
+                uploadExistingEntries(context, groupId, folder.id)
             }
             onResult(result)
+        }
+    }
+
+    private suspend fun uploadExistingEntries(context: Context, groupId: Int, sharedFolderId: Long) {
+        val existing = activeGroupTransactions.value
+        for (tx in existing) {
+            val result = SharedFolderRepository.syncAddEntry(
+                context, sharedFolderId, tx.amount, tx.label, tx.expression, tx.id.toLong()
+            )
+            if (result.isSuccess) {
+                saveEntrySyncMapping(groupId, tx.id.toLong(), result.getOrThrow().id)
+            }
         }
     }
 
@@ -502,10 +559,17 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     fun refreshSharedData(sharedFolderId: Long) {
         viewModelScope.launch {
             _isSyncing.value = true
-            val entries = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
-            if (entries.isSuccess) {
-                _sharedEntries.value = entries.getOrDefault(emptyList())
+            val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
+            if (events.isSuccess) {
+                _syncEvents.value = events.getOrDefault(emptyList())
             }
+            _isSyncing.value = false
+        }
+    }
+
+    fun refreshSyncEvents(sharedFolderId: Long) {
+        viewModelScope.launch {
+            _isSyncing.value = true
             val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
             if (events.isSuccess) {
                 _syncEvents.value = events.getOrDefault(emptyList())
