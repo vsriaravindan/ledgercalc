@@ -9,7 +9,7 @@ data class SharedFolder(
     val ownerDeviceId: String,
     val ownerName: String,
     val permission: String = "full",
-    val currency: String = "$",
+    val currency: String = "₹",
     val createdAt: String = "",
     val usedCount: Int = 0,
 )

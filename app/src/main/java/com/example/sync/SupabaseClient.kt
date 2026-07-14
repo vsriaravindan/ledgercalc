@@ -278,6 +278,13 @@ object SupabaseClient {
             .map { it.toSharedEntryList() }
     }
 
+    /** Fetch entries including soft-deleted ones, for sync cleanup */
+    suspend fun getAllEntries(sharedFolderId: Long): Result<List<SharedEntry>> {
+        return getJson("shared_entries",
+            "shared_folder_id=eq.$sharedFolderId&order=created_at.desc")
+            .map { it.toSharedEntryList() }
+    }
+
     suspend fun addEntry(entry: SharedEntry): Result<SharedEntry> {
         val json = JSONObject().apply {
             put("shared_folder_id", entry.sharedFolderId)

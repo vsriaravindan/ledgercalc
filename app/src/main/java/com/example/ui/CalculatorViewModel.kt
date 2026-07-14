@@ -54,7 +54,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     val calcError: StateFlow<Boolean> = _calcError.asStateFlow()
 
     private val prefs = application.getSharedPreferences("calc_prefs", android.content.Context.MODE_PRIVATE)
-    private val _currencySymbol = MutableStateFlow(prefs.getString("currency", "$") ?: "$")
+    private val _currencySymbol = MutableStateFlow(prefs.getString("currency", "₹") ?: "₹")
     val currencySymbol: StateFlow<String> = _currencySymbol.asStateFlow()
 
     private val _themeMode = MutableStateFlow(prefs.getInt("theme_mode", 0))
@@ -620,27 +620,52 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     /** Pull remote entries from Supabase and create local Room entries for those we don't have */
     fun pullRemoteEntries(sharedFolderId: Long, groupId: Int) {
         viewModelScope.launch {
-            val remoteEntries = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
-            if (remoteEntries.isFailure) return@launch
+            // Fetch ALL entries including deleted ones
+            val remoteAll = com.example.sync.SharedFolderRepository.getAllFolderEntries(sharedFolderId)
+            if (remoteAll.isFailure) return@launch
+            val allRemote = remoteAll.getOrDefault(emptyList())
+            val activeRemote = allRemote.filter { it.deletedAt == null }
+            val deletedRemote = allRemote.filter { it.deletedAt != null }
+
             val existingTx = activeGroupTransactions.value
             val existingLocalIds = existingTx.map { it.id.toLong() }.toSet()
 
-            for (remote in remoteEntries.getOrDefault(emptyList())) {
+            // ── Delete local entries that were deleted remotely ──
+            for (deleted in deletedRemote) {
+                // Find the local entry mapped to this shared entry
+                val localId = getLocalEntryIdBySharedId(deleted.id)
+                if (localId != null && localId.toInt() in existingTx.map { it.id }) {
+                    repository.deleteTransactionById(localId.toInt())
+                }
+            }
+
+            // ── Import active entries that we don't have locally ──
+            for (remote in activeRemote) {
                 val localEntryId = remote.localEntryId
-                // Skip if we already have this entry locally (by local ID match)
+                // Skip if already have locally (by local ID match)
                 if (localEntryId != null && localEntryId in existingLocalIds) continue
-                // Skip if we already mapped this shared entry to a local one (reverse lookup)
+                // Skip if already mapped (reverse lookup)
                 if (getLocalEntryIdBySharedId(remote.id) != null) continue
-                // Skip if a local entry already exists with same amount+label (dupe guard)
+                // Skip if same amount+label already exists (dupe guard)
                 if (existingTx.any { it.amount == remote.amount && it.label == remote.label }) continue
 
-                // Create a local Room entry
+                // Parse original timestamp from Supabase
+                val parsedTime = try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                    sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    sdf.parse(remote.createdAt.take(19))?.time ?: System.currentTimeMillis()
+                } catch (e: Exception) {
+                    System.currentTimeMillis()
+                }
+
+                // Create a local Room entry with original timestamp
                 val localId = repository.insertTransaction(
                     com.example.data.TransactionEntry(
                         groupId = groupId,
                         amount = remote.amount,
                         label = remote.label,
-                        expression = remote.expression
+                        expression = remote.expression,
+                        timestamp = parsedTime,
                     )
                 )
                 saveEntrySyncMapping(groupId, localId, remote.id)

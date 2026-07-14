@@ -223,6 +223,11 @@ object SharedFolderRepository {
         return SupabaseClient.getActiveEntries(sharedFolderId)
     }
 
+    /** Fetch all entries including deleted, for remote delete sync */
+    suspend fun getAllFolderEntries(sharedFolderId: Long): Result<List<SharedEntry>> {
+        return SupabaseClient.getAllEntries(sharedFolderId)
+    }
+
     suspend fun getFolderEvents(sharedFolderId: Long): Result<List<SyncEvent>> {
         return SupabaseClient.getSyncEvents(sharedFolderId)
     }
