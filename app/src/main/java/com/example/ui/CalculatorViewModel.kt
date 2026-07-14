@@ -411,4 +411,114 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             onResult(result)
         }
     }
+
+    // ── Shared Folder State ──────────────────────────────
+
+    private val _sharedFolderId = MutableStateFlow<Long?>(null)
+    val sharedFolderId: StateFlow<Long?> = _sharedFolderId.asStateFlow()
+
+    private val _sharedFolderPermission = MutableStateFlow("full")
+    val sharedFolderPermission: StateFlow<String> = _sharedFolderPermission.asStateFlow()
+
+    private val _sharedEntries = MutableStateFlow<List<com.example.sync.SharedEntry>>(emptyList())
+    val sharedEntries: StateFlow<List<com.example.sync.SharedEntry>> = _sharedEntries.asStateFlow()
+
+    private val _syncEvents = MutableStateFlow<List<com.example.sync.SyncEvent>>(emptyList())
+    val syncEvents: StateFlow<List<com.example.sync.SyncEvent>> = _syncEvents.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    // SharedPreferences for tracking shared folders
+    private val sharedFolderPrefs = application.getSharedPreferences("shared_folders", Context.MODE_PRIVATE)
+
+    fun getSharedFolderIdForGroup(groupId: Int): Long? {
+        val id = sharedFolderPrefs.getLong("group_$groupId", -1L)
+        return if (id == -1L) null else id
+    }
+
+    fun saveSharedFolderMapping(groupId: Int, sharedFolderId: Long) {
+        sharedFolderPrefs.edit().putLong("group_$groupId", sharedFolderId).apply()
+    }
+
+    fun removeSharedFolderMapping(groupId: Int) {
+        sharedFolderPrefs.edit().remove("group_$groupId").apply()
+    }
+
+    fun setSharedFolderInfo(sharedFolderId: Long?, permission: String = "full") {
+        _sharedFolderId.value = sharedFolderId
+        _sharedFolderPermission.value = permission
+    }
+
+    fun clearSharedFolder() {
+        _sharedFolderId.value = null
+        _sharedFolderPermission.value = "full"
+        _sharedEntries.value = emptyList()
+        _syncEvents.value = emptyList()
+    }
+
+    fun loadSharedEntries(sharedFolderId: Long) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val entries = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
+            if (entries.isSuccess) {
+                _sharedEntries.value = entries.getOrDefault(emptyList())
+            }
+            val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
+            if (events.isSuccess) {
+                _syncEvents.value = events.getOrDefault(emptyList())
+            }
+            _isSyncing.value = false
+        }
+    }
+
+    fun shareFolder(
+        context: Context,
+        groupId: Int,
+        groupName: String,
+        permission: String,
+        onResult: (Result<com.example.sync.SharedFolder>) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = com.example.sync.SharedFolderRepository.shareFolder(
+                context, groupId.toLong(), groupName, permission
+            )
+            if (result.isSuccess) {
+                val folder = result.getOrThrow()
+                saveSharedFolderMapping(groupId, folder.id)
+                setSharedFolderInfo(folder.id, permission)
+            }
+            onResult(result)
+        }
+    }
+
+    fun joinFolder(context: Context, code: String, onResult: (Result<com.example.sync.SharedFolderJoinResponse>) -> Unit) {
+        viewModelScope.launch {
+            val result = com.example.sync.SharedFolderRepository.joinFolder(context, code)
+            onResult(result)
+        }
+    }
+
+    fun refreshSharedData(sharedFolderId: Long) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val entries = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
+            if (entries.isSuccess) {
+                _sharedEntries.value = entries.getOrDefault(emptyList())
+            }
+            val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
+            if (events.isSuccess) {
+                _syncEvents.value = events.getOrDefault(emptyList())
+            }
+            _isSyncing.value = false
+        }
+    }
+
+    // ── Network check ────────────────────────────────────
+
+    fun isOnline(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val activeNetwork = cm.activeNetworkInfo
+        return activeNetwork != null && activeNetwork.isConnectedOrConnecting
+    }
 }

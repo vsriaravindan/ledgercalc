@@ -12,8 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.CalculatorViewModel
+import com.example.sync.SupabaseClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +49,29 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
+            // Display Name (for shared folders)
+            SettingsGroup("Shared Folder Name") {
+                val context = LocalContext.current
+                var localDisplayName by remember { mutableStateOf(SupabaseClient.getDisplayName(context)) }
+                
+                OutlinedTextField(
+                    value = localDisplayName,
+                    onValueChange = { localDisplayName = it },
+                    label = { Text("Your name shown to others") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        SupabaseClient.setDisplayName(context, localDisplayName)
+                        android.widget.Toast.makeText(context, "Name saved", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = localDisplayName.isNotBlank(),
+                ) { Text("Save") }
+            }
+
             // Theme
             SettingsGroup("Theme") {
                 Row(
