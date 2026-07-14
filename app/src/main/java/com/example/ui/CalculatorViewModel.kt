@@ -479,6 +479,18 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         return if (map.has(localEntryId.toString())) map.getLong(localEntryId.toString()) else null
     }
 
+    /** Reverse lookup: given a shared entry ID, find the local entry ID */
+    fun getLocalEntryIdBySharedId(sharedEntryId: Long): Long? {
+        val mapJson = sharedFolderPrefs.getString(getEntrySyncMapKey(), "{}") ?: "{}"
+        val map = JSONObject(mapJson)
+        val keys = map.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (map.optLong(key) == sharedEntryId) return key.toLong()
+        }
+        return null
+    }
+
     fun saveEntrySyncMapping(groupId: Int, localEntryId: Long, sharedEntryId: Long) {
         val sfId = getSharedFolderIdForGroup(groupId) ?: return
         val key = "entry_sync_$sfId"
@@ -615,10 +627,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
             for (remote in remoteEntries.getOrDefault(emptyList())) {
                 val localEntryId = remote.localEntryId
-                // Skip if we already have this entry locally
+                // Skip if we already have this entry locally (by local ID match)
                 if (localEntryId != null && localEntryId in existingLocalIds) continue
-                // Skip if we already mapped this shared entry to a local one
-                if (getSharedEntryId(remote.id) != null) continue
+                // Skip if we already mapped this shared entry to a local one (reverse lookup)
+                if (getLocalEntryIdBySharedId(remote.id) != null) continue
+                // Skip if a local entry already exists with same amount+label (dupe guard)
+                if (existingTx.any { it.amount == remote.amount && it.label == remote.label }) continue
 
                 // Create a local Room entry
                 val localId = repository.insertTransaction(
