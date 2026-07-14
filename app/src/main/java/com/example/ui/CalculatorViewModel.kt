@@ -69,6 +69,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     fun setCurrency(symbol: String) {
         _currencySymbol.value = symbol
         prefs.edit().putString("currency", symbol).apply()
+        // Sync currency to all owned shared folders
+        viewModelScope.launch {
+            syncCurrencyToSharedFolders(getApplication(), symbol)
+        }
     }
 
     fun setThemeMode(mode: Int) {
@@ -524,7 +528,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     ) {
         viewModelScope.launch {
             val result = com.example.sync.SharedFolderRepository.shareFolder(
-                context, groupId.toLong(), groupName, permission
+                context, groupId.toLong(), groupName, permission, _currencySymbol.value
             )
             if (result.isSuccess) {
                 val folder = result.getOrThrow()
@@ -538,7 +542,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun uploadExistingEntries(context: Context, groupId: Int, sharedFolderId: Long) {
-        val existing = activeGroupTransactions.value
+        val existing = db.calculatorDao().getTransactionsOnce(groupId)
+        if (existing.isEmpty()) return
         for (tx in existing) {
             val result = SharedFolderRepository.syncAddEntry(
                 context, sharedFolderId, tx.amount, tx.label, tx.expression, tx.id.toLong()
@@ -559,11 +564,33 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     fun refreshSharedData(sharedFolderId: Long) {
         viewModelScope.launch {
             _isSyncing.value = true
-            val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
-            if (events.isSuccess) {
-                _syncEvents.value = events.getOrDefault(emptyList())
+            // Fetch folder info for permission + currency
+            val folderInfo = com.example.sync.SupabaseClient.getSharedFolderById(sharedFolderId)
+            if (folderInfo.isSuccess) {
+                val folder = folderInfo.getOrThrow().firstOrNull()
+                if (folder != null) {
+                    _sharedFolderPermission.value = folder.permission
+                    // Apply remote currency if different
+                    val ctx = getApplication<Application>()
+                    val localCurrency = _currencySymbol.value
+                    if (folder.currency != localCurrency) {
+                        _currencySymbol.value = folder.currency
+                        ctx.getSharedPreferences("calc_prefs", Context.MODE_PRIVATE)
+                            .edit().putString("currency", folder.currency).apply()
+                    }
+                }
             }
             _isSyncing.value = false
+        }
+    }
+
+    /** Sync this device's currency to all shared folders owned by this device */
+    private suspend fun syncCurrencyToSharedFolders(context: Context, currency: String) {
+        val deviceId = com.example.sync.SupabaseClient.getDeviceId(context)
+        val owned = com.example.sync.SupabaseClient.getSharedFoldersByDevice(deviceId)
+        if (owned.isFailure) return
+        for (folder in owned.getOrDefault(emptyList())) {
+            com.example.sync.SupabaseClient.updateCurrency(folder.id, currency)
         }
     }
 

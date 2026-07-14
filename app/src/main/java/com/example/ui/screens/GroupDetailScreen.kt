@@ -62,6 +62,17 @@ fun GroupDetailScreen(
         }
     }
 
+    // Auto-poll every 10 seconds when shared folder is open
+    LaunchedEffect(sharedFolderId) {
+        if (sharedFolderId != null) {
+            while (true) {
+                kotlinx.coroutines.delay(10_000)
+                viewModel.pullRemoteEntries(sharedFolderId, groupId)
+                viewModel.loadSyncEvents(sharedFolderId)
+            }
+        }
+    }
+
     val group by viewModel.activeGroup.collectAsStateWithLifecycle()
     val transactions by viewModel.activeGroupTransactions.collectAsStateWithLifecycle()
     val balance by viewModel.activeGroupBalance.collectAsStateWithLifecycle()

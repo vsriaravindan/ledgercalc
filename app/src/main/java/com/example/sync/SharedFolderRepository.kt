@@ -26,6 +26,7 @@ object SharedFolderRepository {
         localFolderId: Long,
         folderName: String,
         permission: String,
+        currency: String = "$",
     ): Result<SharedFolder> = withContext(Dispatchers.IO) {
         val deviceId = SupabaseClient.getDeviceId(context)
         val ownerName = SupabaseClient.getDisplayName(context)
@@ -41,6 +42,7 @@ object SharedFolderRepository {
             ownerDeviceId = deviceId,
             ownerName = ownerName,
             permission = permission,
+            currency = currency,
         )
 
         val result = SupabaseClient.createSharedFolder(folder)

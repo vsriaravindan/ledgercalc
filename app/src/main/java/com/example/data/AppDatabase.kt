@@ -86,6 +86,9 @@ interface CalculatorDao {
     @Query("SELECT * FROM transaction_entry WHERE groupId = :groupId ORDER BY timestamp DESC")
     fun getTransactionsByGroupId(groupId: Int): Flow<List<TransactionEntry>>
 
+    @Query("SELECT * FROM transaction_entry WHERE groupId = :groupId")
+    suspend fun getTransactionsOnce(groupId: Int): List<TransactionEntry>
+
     @Query("SELECT SUM(amount) FROM transaction_entry WHERE groupId = :groupId")
     fun getGroupBalance(groupId: Int): Flow<Double?>
 

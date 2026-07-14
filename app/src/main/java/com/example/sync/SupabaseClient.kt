@@ -138,6 +138,7 @@ object SupabaseClient {
                 ownerDeviceId = obj.optString("owner_device_id"),
                 ownerName = obj.optString("owner_name"),
                 permission = obj.optString("permission", "full"),
+                currency = obj.optString("currency", "$"),
                 createdAt = obj.optString("created_at"),
                 usedCount = obj.optInt("used_count"),
             ))
@@ -216,6 +217,7 @@ object SupabaseClient {
             put("owner_device_id", folder.ownerDeviceId)
             put("owner_name", folder.ownerName)
             put("permission", folder.permission)
+            put("currency", folder.currency)
         }.toString()
         val result = postJson("shared_folders", json)
         return result.map { it.toSharedFolderList().firstOrNull() ?: folder }
@@ -233,6 +235,15 @@ object SupabaseClient {
     suspend fun incrementUsedCode(sharedFolderId: Long): Result<Boolean> {
         return patchRequest("shared_folders", "id=eq.$sharedFolderId",
             """{"used_count": 1}""")
+    }
+
+    suspend fun getSharedFolderById(sharedFolderId: Long): Result<List<SharedFolder>> {
+        return getJson("shared_folders", "id=eq.$sharedFolderId&limit=1").map { it.toSharedFolderList() }
+    }
+
+    suspend fun updateCurrency(sharedFolderId: Long, currency: String): Result<Boolean> {
+        return patchRequest("shared_folders", "id=eq.$sharedFolderId",
+            """{"currency": "$currency"}""")
     }
 
     // ── API: Shared Members ─────────────────────────────
