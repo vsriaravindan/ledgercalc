@@ -67,6 +67,8 @@ fun GroupDetailScreen(
         if (sharedFolderId != null) {
             while (true) {
                 kotlinx.coroutines.delay(10_000)
+                // First process deletes, then pull new entries
+                viewModel.processRemoteDeletes(sharedFolderId, groupId)
                 viewModel.pullRemoteEntries(sharedFolderId, groupId)
                 viewModel.loadSyncEvents(sharedFolderId)
             }

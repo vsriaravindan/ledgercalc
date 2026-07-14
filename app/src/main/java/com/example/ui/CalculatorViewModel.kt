@@ -617,58 +617,68 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Pull remote entries from Supabase and create local Room entries for those we don't have */
+    /** Pull remote entries from Supabase — only adds new ones, does NOT delete */
     fun pullRemoteEntries(sharedFolderId: Long, groupId: Int) {
         viewModelScope.launch {
-            // Fetch ALL entries including deleted ones
-            val remoteAll = com.example.sync.SharedFolderRepository.getAllFolderEntries(sharedFolderId)
-            if (remoteAll.isFailure) return@launch
-            val allRemote = remoteAll.getOrDefault(emptyList())
-            val activeRemote = allRemote.filter { it.deletedAt == null }
-            val deletedRemote = allRemote.filter { it.deletedAt != null }
+            val remoteList = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
+            if (remoteList.isFailure) return@launch
+            val remote = remoteList.getOrDefault(emptyList())
 
-            val existingTx = activeGroupTransactions.value
-            val existingLocalIds = existingTx.map { it.id.toLong() }.toSet()
+            for (entry in remote) {
+                // Read fresh local state each iteration
+                val currentTx = activeGroupTransactions.value
+                // Skip if same amount+label+expression already exists locally
+                if (currentTx.any { it.amount == entry.amount && it.label == entry.label && it.expression == entry.expression }) continue
+                // Skip if mapped via shared entry ID reverse lookup
+                if (getLocalEntryIdBySharedId(entry.id) != null) continue
 
-            // ── Delete local entries that were deleted remotely ──
-            for (deleted in deletedRemote) {
-                // Find the local entry mapped to this shared entry
-                val localId = getLocalEntryIdBySharedId(deleted.id)
-                if (localId != null && localId.toInt() in existingTx.map { it.id }) {
-                    repository.deleteTransactionById(localId.toInt())
-                }
-            }
-
-            // ── Import active entries that we don't have locally ──
-            for (remote in activeRemote) {
-                val localEntryId = remote.localEntryId
-                // Skip if already have locally (by local ID match)
-                if (localEntryId != null && localEntryId in existingLocalIds) continue
-                // Skip if already mapped (reverse lookup)
-                if (getLocalEntryIdBySharedId(remote.id) != null) continue
-                // Skip if same amount+label already exists (dupe guard)
-                if (existingTx.any { it.amount == remote.amount && it.label == remote.label }) continue
-
-                // Parse original timestamp from Supabase
+                // Parse original Supabase timestamp
                 val parsedTime = try {
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
                     sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    sdf.parse(remote.createdAt.take(19))?.time ?: System.currentTimeMillis()
+                    sdf.parse(entry.createdAt.take(19))?.time ?: System.currentTimeMillis()
                 } catch (e: Exception) {
                     System.currentTimeMillis()
                 }
 
-                // Create a local Room entry with original timestamp
                 val localId = repository.insertTransaction(
                     com.example.data.TransactionEntry(
                         groupId = groupId,
-                        amount = remote.amount,
-                        label = remote.label,
-                        expression = remote.expression,
+                        amount = entry.amount,
+                        label = entry.label,
+                        expression = entry.expression,
                         timestamp = parsedTime,
                     )
                 )
-                saveEntrySyncMapping(groupId, localId, remote.id)
+                saveEntrySyncMapping(groupId, localId, entry.id)
+            }
+        }
+    }
+
+    /** Process sync events from remote — deletes local entries matched via amount+label */
+    fun processRemoteDeletes(sharedFolderId: Long, groupId: Int) {
+        viewModelScope.launch {
+            val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
+            if (events.isFailure) return@launch
+
+            // Only process events with "deleted" type that were done by OTHER users
+            val currentName = com.example.sync.SupabaseClient.getDisplayName(getApplication())
+            val deleteEvents = events.getOrDefault(emptyList())
+                .filter { it.eventType == "deleted" && it.actorName != currentName && it.amount != null }
+
+            for (event in deleteEvents) {
+                // Read fresh state each iteration
+                val currentTx = activeGroupTransactions.value
+                val match = currentTx.firstOrNull {
+                    it.amount == event.amount && 
+                    it.label == (event.label ?: "") && 
+                    it.expression == (event.expression ?: "")
+                }
+                if (match != null) {
+                    repository.deleteTransactionById(match.id)
+                    // Small delay to let Room emit before next iteration
+                    kotlinx.coroutines.delay(100)
+                }
             }
         }
     }
