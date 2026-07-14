@@ -32,6 +32,8 @@ import com.example.ui.CalculatorViewModel
 import com.example.data.TransactionEntry
 import com.example.sync.SharedFolderRepository
 import com.example.sync.SyncEvent
+import com.example.sync.SharedMember
+import com.example.ui.screens.ManageMembersDialog
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,21 +59,18 @@ fun GroupDetailScreen(
             viewModel.setSharedFolderInfo(sharedFolderId)
             // Fetch permission from Supabase
             viewModel.refreshSharedData(sharedFolderId)
+            // One-time initial pull of existing entries
             viewModel.pullRemoteEntries(sharedFolderId, groupId)
             viewModel.loadSyncEvents(sharedFolderId)
+            // Start Realtime WebSocket subscription (replaces auto-poll)
+            viewModel.startRealtimeSubscription(sharedFolderId, groupId)
         }
     }
 
-    // Auto-poll every 10 seconds when shared folder is open
-    LaunchedEffect(sharedFolderId) {
-        if (sharedFolderId != null) {
-            while (true) {
-                kotlinx.coroutines.delay(10_000)
-                // First process deletes, then pull new entries
-                viewModel.processRemoteDeletes(sharedFolderId, groupId)
-                viewModel.pullRemoteEntries(sharedFolderId, groupId)
-                viewModel.loadSyncEvents(sharedFolderId)
-            }
+    // Stop Realtime subscription when leaving the screen
+    DisposableEffect(sharedFolderId) {
+        onDispose {
+            viewModel.stopRealtimeSubscription()
         }
     }
 
@@ -81,6 +80,8 @@ fun GroupDetailScreen(
     val currency by viewModel.currencySymbol.collectAsStateWithLifecycle()
     val syncEvents by viewModel.syncEvents.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val realtimeConnected by viewModel.realtimeConnected.collectAsStateWithLifecycle()
+    val members by viewModel.members.collectAsStateWithLifecycle()
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -98,6 +99,8 @@ fun GroupDetailScreen(
     var showManualAddDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf<TransactionEntry?>(null) }
     var transactionToDelete by remember { mutableStateOf<Int?>(null) }
+    var showManageDialog by remember { mutableStateOf(false) }
+    var showConfirmLeaveDialog by remember { mutableStateOf(false) }
 
     val sortedTransactions = remember(transactions, sortOption) {
         when (sortOption) {
@@ -144,10 +147,35 @@ fun GroupDetailScreen(
                 },
                 actions = {
                     if (isShared) {
-                        IconButton(onClick = {
-                            sharedFolderId?.let { viewModel.refreshSyncEvents(it) }
-                        }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        var showOverflowMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showOverflowMenu = true }) {
+                                Icon(Icons.Default.Menu, contentDescription = "More")
+                            }
+                            DropdownMenu(expanded = showOverflowMenu, onDismissRequest = { showOverflowMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Refresh") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        sharedFolderId?.let { viewModel.refreshSyncEvents(it) }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Manage Members") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        showManageDialog = true
+                                        sharedFolderId?.let { viewModel.loadMembers(it) }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Leave Shared Ledger") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        showConfirmLeaveDialog = true
+                                    }
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = {
@@ -235,8 +263,46 @@ fun GroupDetailScreen(
                 }
             }
 
-            if (isShared && isSyncing) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            if (isShared) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (realtimeConnected) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(percent = 50),
+                                modifier = Modifier.size(8.dp)
+                            ) {}
+                            Spacer(Modifier.width(6.dp))
+                            Text("Live", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Surface(
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(percent = 50),
+                                modifier = Modifier.size(8.dp)
+                            ) {}
+                            Spacer(Modifier.width(6.dp))
+                            Text("Offline", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = {
+                        showManageDialog = true
+                        sharedFolderId?.let { viewModel.loadMembers(it) }
+                    }) {
+                        Text("Manage Members", style = MaterialTheme.typography.labelSmall)
+                    }
+                    TextButton(onClick = { showConfirmLeaveDialog = true }) {
+                        Text("Leave", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                if (isSyncing) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
 
             // Balance Header
@@ -442,6 +508,47 @@ fun GroupDetailScreen(
                 },
                 confirmButton = { Button(onClick = { validateAndSave() }) { Text("Save") } },
                 dismissButton = { TextButton(onClick = { showManualAddDialog = false; showEditDialog = null }) { Text("Cancel") } }
+            )
+        }
+
+        // ── Manage Members Dialog ───────────────────────────
+        if (showManageDialog && sharedFolderId != null) {
+            ManageMembersDialog(
+                members = members,
+                isOwner = members.find { it.deviceId == com.example.sync.SupabaseClient.getDeviceId(context) }?.isOwner == true,
+                onRemoveMember = { memberId ->
+                    viewModel.removeMember(context, sharedFolderId, memberId) { success ->
+                        if (success) {
+                            android.widget.Toast.makeText(context, "Member removed", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, "Failed to remove member", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                onDismiss = { showManageDialog = false },
+            )
+        }
+
+        // ── Leave Shared Folder Confirmation ────────────────
+        if (showConfirmLeaveDialog && sharedFolderId != null) {
+            AlertDialog(
+                onDismissRequest = { showConfirmLeaveDialog = false },
+                title = { Text("Leave Shared Ledger") },
+                text = { Text("Are you sure? You will lose access to this shared ledger, and the local group will be deleted.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showConfirmLeaveDialog = false
+                        viewModel.leaveSharedFolder(context, sharedFolderId, groupId) { success ->
+                            if (success) {
+                                android.widget.Toast.makeText(context, "Left shared ledger", android.widget.Toast.LENGTH_SHORT).show()
+                                onBack()
+                            } else {
+                                android.widget.Toast.makeText(context, "Failed to leave", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }) { Text("Leave", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { TextButton(onClick = { showConfirmLeaveDialog = false }) { Text("Cancel") } }
             )
         }
     }

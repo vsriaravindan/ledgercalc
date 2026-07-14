@@ -102,18 +102,28 @@ app/src/main/java/com/example/
 - [x] ₹ default currency
 - [x] Sun/moon toggle in Calchub
 - [x] BackHandler for system swipe gesture
-
-### Shared Folders (NEW — v2)
-- [x] Share any folder via 6-digit secret code
-- [x] Read-only or Full-access permissions
-- [x] Join shared folder via code
-- [x] Real-time sync via auto-poll (10s interval)
-- [x] Audit trail — every edit/delete logged with actor name
-- [x] Audit chips shown inline (📝 edited, 🗑️ deleted)
-- [x] Offline guard — internet required to edit shared folders
-- [x] Cross-device delete sync
-- [x] Currency sync across devices
-- [x] Original timestamps preserved on pull
+| ### Shared Folders (NEW — v2) | REAL-TIME WEBSOCKET+  |
+|--|--|
+| - [x] Share any folder via 6-digit secret code |
+| - [x] Read-only or Full-access permissions |
+| - [x] Join shared folder via code |
+| - [x] Real-time sync via **Supabase Realtime WebSocket** (replaces 10s auto-poll) |
+| - [x] Instant cross-device sync (INSERT/UPDATE/DELETE via Phoenix Channels) |
+| - [x] Live connection indicator (green dot / Offline) |
+| - [x] Auto-reconnect with exponential backoff |
+| - [x] Audit trail — every edit/delete logged with actor name |
+| - [x] Audit chips shown inline (📝 edited, 🗑️ deleted) |
+| - [x] Offline guard — internet required to edit shared folders |
+| - [x] Cross-device delete sync |
+| - [x] Currency sync across devices |
+| - [x] Original timestamps preserved on pull |
+| - [x] **Manage Members** — owner can remove/unshare members |
+| - [x] **Leave Shared Folder** — joiner self-removes |
+| - [x] **Unshare Ledger** from Groups list |
+| - [ ] Conflict resolution UI when offline edits clash |
+| - [ ] Push notifications for shared folder changes |
+| - [ ] Deep link sharing for codes |
+| - [ ] processRemoteDeletes by amount+label+expression — could use entry_id mapping instead |
 
 ---
 
@@ -189,19 +199,28 @@ sync_events (id BIGINT PK, shared_folder_id BIGINT FK, event_type TEXT,
 ┌─────────────────────────┐        ┌─────────────────────────┐
 │      Phone A (Owner)    │        │      Phone B (Joiner)   │
 │                         │        │                         │
-│  Add entry → Room       │        │  Auto-poll (10s)        │
+│  Add entry → Room       │        │  WebSocket subscription │
 │          ↓              │        │      ↓                  │
-│  POST shared_entries    │───────▶│  pullRemoteEntries()    │
+│  POST shared_entries    │───────▶│  handleRealtimeInsert() │
 │  POST sync_events       │  REST  │      ↓                  │
-│                         │        │  Create Room entry      │
-│  Delete entry → Room    │        │                         │
-│          ↓              │        │  Auto-poll (10s)        │
-│  PATCH shared_entries   │───────▶│  processRemoteDeletes() │
-│  (deleted_at=now())     │  REST  │      ↓                  │
-│  POST sync_events       │        │  Delete Room entry      │
+│          ↓              │  (REST  │  Create Room entry     │
+│  Realtime WebSocket     │   +     │      (instant)         │
+│  fires UPDATE to both   │  WSS)  │                         │
+│          ↓              │        │  WebSocket subscription │
+│  (skipped — self)       │◀───────│  handles UPDATE/DELETE  │
+│                         │  REST  │      ↓                  │
+│  Delete entry → Room    │        │  handleRealtimeSoftD…()│
+│          ↓              │        │      ↓                  │
+│  PATCH shared_entries   │───────▶│  Delete Room entry     │
+│  (deleted_at=now())     │  REST  │      (instant)          │
+│  POST sync_events       │        │                         │
+│          ↓              │        │  Live indicator: 🟢     │
+│  Realtime WebSocket     │        │  Auto-reconnect: ✓     │
+│  fires UPDATE to both   │        │  10s poll: REMOVED     │
+│          ↓              │        │                         │
+│  (skipped — self)       │        │                         │
 └─────────────────────────┘        └─────────────────────────┘
 ```
-
 ---
 
 ## Supabase Setup
@@ -249,10 +268,10 @@ GRANT SELECT, INSERT ON sync_events TO anon;
 
 ## Remaining / Potential Improvements
 
-1. **Real-time WebSocket** — Replace auto-poll with Supabase Realtime subscription for instant sync
-2. **Unshare member** — Owner can remove a member (currently code is single-use but no removal UI)
-3. **Conflict resolution UI** — Show "discarded change" notification on offline conflict
-4. **Push notifications** — Notify when someone edits/deletes in a shared folder
-5. **Deep link sharing** — Generate a link instead of manual code entry
-6. **Multiple shared folders per group** — Currently 1:1 mapping
-7. **Leave shared folder** — User can remove themselves
+1. ~~**Real-time WebSocket** — Replace auto-poll with Supabase Realtime subscription for instant sync~~ ✅ DONE
+2. ~~**Unshare member** — Owner can remove a member~~ ✅ DONE (Manage Members dialog)
+3. ~~**Leave Shared Folder** — User can remove themselves~~ ✅ DONE (Leave + Unshare)
+4. **Conflict resolution UI** — Show "discarded change" notification on offline conflict
+5. **Push notifications** — Notify when someone edits/deletes in a shared folder
+6. **Deep link sharing** — Generate a link instead of manual code entry
+7. **Multiple shared folders per group** — Currently 1:1 mapping

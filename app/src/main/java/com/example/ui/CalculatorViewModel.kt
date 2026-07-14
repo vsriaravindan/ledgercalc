@@ -454,6 +454,14 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    /** Realtime WebSocket connection status */
+    private val _realtimeConnected = MutableStateFlow(false)
+    val realtimeConnected: StateFlow<Boolean> = _realtimeConnected.asStateFlow()
+
+    /** List of active members in the shared folder (for Manage dialog) */
+    private val _members = MutableStateFlow<List<com.example.sync.SharedMember>>(emptyList())
+    val members: StateFlow<List<com.example.sync.SharedMember>> = _members.asStateFlow()
+
     // SharedPreferences for tracking shared folders
     private val sharedFolderPrefs = application.getSharedPreferences("shared_folders", Context.MODE_PRIVATE)
 
@@ -518,6 +526,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         _sharedFolderId.value = null
         _sharedFolderPermission.value = "full"
         _syncEvents.value = emptyList()
+        stopRealtimeSubscription()
+        _realtimeConnected.value = false
     }
 
     fun loadSyncEvents(sharedFolderId: Long) {
@@ -617,7 +627,171 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Pull remote entries from Supabase — only adds new ones, does NOT delete */
+    // ── Realtime WebSocket Subscription ───────────────────
+
+    private var realtimeJob: kotlinx.coroutines.Job? = null
+
+    /** Start listening to Realtime changes for a shared folder. Replaces auto-poll. */
+    fun startRealtimeSubscription(sharedFolderId: Long, groupId: Int) {
+        stopRealtimeSubscription()
+        realtimeJob = viewModelScope.launch {
+            _realtimeConnected.value = false
+            com.example.sync.SupabaseClient.realtimeChanges(sharedFolderId).collect { change ->
+                _realtimeConnected.value = true
+                when (change.eventType) {
+                    "INSERT" -> handleRealtimeInsert(change, groupId, sharedFolderId)
+                    "UPDATE" -> handleRealtimeUpdate(change, groupId, sharedFolderId)
+                    "DELETE" -> handleRealtimeDelete(change, groupId, sharedFolderId)
+                }
+            }
+            _realtimeConnected.value = false
+        }
+    }
+
+    /** Stop the Realtime subscription */
+    fun stopRealtimeSubscription() {
+        realtimeJob?.cancel()
+        realtimeJob = null
+        _realtimeConnected.value = false
+    }
+
+    private suspend fun handleRealtimeInsert(
+        change: com.example.sync.SupabaseClient.RealtimeChange,
+        groupId: Int,
+        sharedFolderId: Long,
+    ) {
+        val record = change.record
+        val createdBy = record.optString("created_by", "")
+        val currentName = com.example.sync.SupabaseClient.getDisplayName(getApplication())
+        if (createdBy == currentName) return // skip own inserts
+
+        val sharedEntryId = record.optLong("id")
+        if (getLocalEntryIdBySharedId(sharedEntryId) != null) return // already mapped
+
+        val amount = record.optDouble("amount", 0.0)
+        val label = record.optString("label", "")
+        val expression = record.optString("expression", "")
+
+        val parsedTime = try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            sdf.parse(record.optString("created_at", "").take(19))?.time ?: System.currentTimeMillis()
+        } catch (_: Exception) { System.currentTimeMillis() }
+
+        val localId = repository.insertTransaction(
+            com.example.data.TransactionEntry(
+                groupId = groupId,
+                amount = amount,
+                label = label,
+                expression = expression,
+                timestamp = parsedTime,
+            )
+        )
+        saveEntrySyncMapping(groupId, localId, sharedEntryId)
+        loadSyncEvents(sharedFolderId)
+    }
+
+    private suspend fun handleRealtimeUpdate(
+        change: com.example.sync.SupabaseClient.RealtimeChange,
+        groupId: Int,
+        sharedFolderId: Long,
+    ) {
+        val record = change.record
+        // Detect soft-delete: deleted_at was set
+        if (record.has("deleted_at") && !record.isNull("deleted_at")) {
+            handleRealtimeSoftDelete(change, groupId, sharedFolderId)
+            return
+        }
+
+        val updatedBy = record.optString("updated_by", "")
+        val currentName = com.example.sync.SupabaseClient.getDisplayName(getApplication())
+        if (updatedBy == currentName) return // skip own edits
+
+        val sharedEntryId = record.optLong("id")
+        val localId = getLocalEntryIdBySharedId(sharedEntryId) ?: return
+
+        val amount = record.optDouble("amount", 0.0)
+        val label = record.optString("label", "")
+        val expression = record.optString("expression", "")
+
+        repository.updateTransaction(
+            com.example.data.TransactionEntry(
+                id = localId.toInt(),
+                groupId = groupId,
+                amount = amount,
+                label = label,
+                expression = expression,
+                timestamp = System.currentTimeMillis(),
+            )
+        )
+        loadSyncEvents(sharedFolderId)
+    }
+
+    private suspend fun handleRealtimeSoftDelete(
+        change: com.example.sync.SupabaseClient.RealtimeChange,
+        groupId: Int,
+        sharedFolderId: Long,
+    ) {
+        val record = change.record
+        val deletedBy = record.optString("deleted_by", "")
+        val currentName = com.example.sync.SupabaseClient.getDisplayName(getApplication())
+        if (deletedBy == currentName) return // skip own deletes
+
+        val sharedEntryId = record.optLong("id")
+        var localId = getLocalEntryIdBySharedId(sharedEntryId)
+
+        if (localId == null) {
+            // Fallback: match by amount+label+expression from old_record or record
+            val amount = change.oldRecord.optDouble("amount", record.optDouble("amount", 0.0))
+            val label = change.oldRecord.optString("label", record.optString("label", ""))
+            val expression = change.oldRecord.optString("expression", record.optString("expression", ""))
+            val match = activeGroupTransactions.value.firstOrNull {
+                it.amount == amount && it.label == label && it.expression == expression
+            }
+            if (match != null) {
+                localId = match.id.toLong()
+            }
+        }
+
+        if (localId != null) {
+            repository.deleteTransactionById(localId.toInt())
+            removeEntrySyncMapping(groupId, localId)
+        }
+        loadSyncEvents(sharedFolderId)
+    }
+
+    private suspend fun handleRealtimeDelete(
+        change: com.example.sync.SupabaseClient.RealtimeChange,
+        groupId: Int,
+        sharedFolderId: Long,
+    ) {
+        // For actual SQL DELETEs (not soft deletes), data is in old_record
+        val oldRecord = change.oldRecord
+        if (oldRecord.length() == 0) return
+
+        val sharedEntryId = oldRecord.optLong("id")
+        var localId = getLocalEntryIdBySharedId(sharedEntryId)
+
+        if (localId == null) {
+            val amount = oldRecord.optDouble("amount", 0.0)
+            val label = oldRecord.optString("label", "")
+            val expression = oldRecord.optString("expression", "")
+            val match = activeGroupTransactions.value.firstOrNull {
+                it.amount == amount && it.label == label && it.expression == expression
+            }
+            if (match != null) localId = match.id.toLong()
+        }
+
+        if (localId != null) {
+            repository.deleteTransactionById(localId.toInt())
+            removeEntrySyncMapping(groupId, localId)
+        }
+        loadSyncEvents(sharedFolderId)
+    }
+
+    // ── Initial sync (one-time on open, replaces old polling load) ──
+
+    /** Pull remote entries from Supabase — only adds new ones, one-shot */
     fun pullRemoteEntries(sharedFolderId: Long, groupId: Int) {
         viewModelScope.launch {
             val remoteList = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
@@ -625,21 +799,15 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val remote = remoteList.getOrDefault(emptyList())
 
             for (entry in remote) {
-                // Read fresh local state each iteration
                 val currentTx = activeGroupTransactions.value
-                // Skip if same amount+label+expression already exists locally
                 if (currentTx.any { it.amount == entry.amount && it.label == entry.label && it.expression == entry.expression }) continue
-                // Skip if mapped via shared entry ID reverse lookup
                 if (getLocalEntryIdBySharedId(entry.id) != null) continue
 
-                // Parse original Supabase timestamp
                 val parsedTime = try {
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
                     sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
                     sdf.parse(entry.createdAt.take(19))?.time ?: System.currentTimeMillis()
-                } catch (e: Exception) {
-                    System.currentTimeMillis()
-                }
+                } catch (_: Exception) { System.currentTimeMillis() }
 
                 val localId = repository.insertTransaction(
                     com.example.data.TransactionEntry(
@@ -655,31 +823,45 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Process sync events from remote — deletes local entries matched via amount+label */
-    fun processRemoteDeletes(sharedFolderId: Long, groupId: Int) {
+    // ── Manage Members / Leave Folder ─────────────────────
+
+    /** Load active members for the Manage Members dialog. Only owner can see non-owners. */
+    fun loadMembers(sharedFolderId: Long) {
         viewModelScope.launch {
-            val events = com.example.sync.SharedFolderRepository.getFolderEvents(sharedFolderId)
-            if (events.isFailure) return@launch
-
-            // Only process events with "deleted" type that were done by OTHER users
-            val currentName = com.example.sync.SupabaseClient.getDisplayName(getApplication())
-            val deleteEvents = events.getOrDefault(emptyList())
-                .filter { it.eventType == "deleted" && it.actorName != currentName && it.amount != null }
-
-            for (event in deleteEvents) {
-                // Read fresh state each iteration
-                val currentTx = activeGroupTransactions.value
-                val match = currentTx.firstOrNull {
-                    it.amount == event.amount && 
-                    it.label == (event.label ?: "") && 
-                    it.expression == (event.expression ?: "")
-                }
-                if (match != null) {
-                    repository.deleteTransactionById(match.id)
-                    // Small delay to let Room emit before next iteration
-                    kotlinx.coroutines.delay(100)
-                }
+            _isSyncing.value = true
+            val result = com.example.sync.SharedFolderRepository.getActiveMembers(sharedFolderId)
+            if (result.isSuccess) {
+                _members.value = result.getOrDefault(emptyList())
             }
+            _isSyncing.value = false
+        }
+    }
+
+    /** Owner removes a non-owner member from the shared folder */
+    fun removeMember(context: Context, sharedFolderId: Long, memberId: Long, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val result = com.example.sync.SharedFolderRepository.removeMember(context, sharedFolderId, memberId)
+            onResult(result.isSuccess)
+            if (result.isSuccess) {
+                loadMembers(sharedFolderId)
+            }
+        }
+    }
+
+    /** Current user leaves the shared folder — deactivates membership + removes local group */
+    fun leaveSharedFolder(context: Context, sharedFolderId: Long, groupId: Int, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            stopRealtimeSubscription()
+            val result = com.example.sync.SharedFolderRepository.leaveFolder(context, sharedFolderId)
+            if (result.isSuccess) {
+                repository.deleteGroupById(groupId)
+                removeSharedFolderMapping(groupId)
+                clearSharedFolder()
+                // Clear the entry sync map for this folder
+                val key = "entry_sync_$sharedFolderId"
+                sharedFolderPrefs.edit().remove(key).apply()
+            }
+            onResult(result.isSuccess)
         }
     }
 

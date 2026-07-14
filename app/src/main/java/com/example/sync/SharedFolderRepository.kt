@@ -231,4 +231,22 @@ object SharedFolderRepository {
     suspend fun getFolderEvents(sharedFolderId: Long): Result<List<SyncEvent>> {
         return SupabaseClient.getSyncEvents(sharedFolderId)
     }
+
+    // ── Member Management ────────────────────────────────
+
+    /** Owner removes a non-owner member from the shared folder */
+    suspend fun removeMember(context: Context, sharedFolderId: Long, memberId: Long): Result<Boolean> {
+        return SupabaseClient.deactivateMember(memberId)
+    }
+
+    /** Current user leaves a shared folder (deactivates own membership) */
+    suspend fun leaveFolder(context: Context, sharedFolderId: Long): Result<Boolean> {
+        val deviceId = SupabaseClient.getDeviceId(context)
+        return SupabaseClient.leaveFolder(sharedFolderId, deviceId)
+    }
+
+    /** Get the list of active members (for Manage dialog) */
+    suspend fun getActiveMembers(sharedFolderId: Long): Result<List<SharedMember>> {
+        return SupabaseClient.getActiveMembers(sharedFolderId)
+    }
 }

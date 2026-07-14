@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.LedgerGroup
+import com.example.sync.SharedMember
 import com.example.ui.CalculatorViewModel
 
 // ── SHARE DIALOG ────────────────────────────────────────
@@ -248,6 +249,74 @@ fun JoinFolderDialog(
                             Text("Join")
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// ── MANAGE MEMBERS DIALOG ──────────────────────────────
+
+@Composable
+fun ManageMembersDialog(
+    members: List<SharedMember>,
+    isOwner: Boolean,
+    onRemoveMember: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("Manage Members", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+                if (members.isEmpty()) {
+                    Text("No active members.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                        items(members) { member ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = member.displayName.ifEmpty { "Unnamed" },
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            text = if (member.isOwner) "👑 Owner" else "Member",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    if (!member.isOwner && isOwner) {
+                                        TextButton(onClick = { onRemoveMember(member.id) }) {
+                                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Close") }
                 }
             }
         }

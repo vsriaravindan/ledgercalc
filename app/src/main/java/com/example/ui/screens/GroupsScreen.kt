@@ -174,6 +174,23 @@ fun GroupsScreen(
                                                 },
                                                 modifier = Modifier.fillMaxWidth()
                                             ) { Text("Share to Friend", color = MaterialTheme.colorScheme.primary) }
+                                        } else {
+                                            TextButton(
+                                                onClick = {
+                                                    showOptionsDialog = false
+                                                    onGroupClick(group.id)
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) { Text("Manage Members", color = MaterialTheme.colorScheme.primary) }
+                                            TextButton(
+                                                onClick = {
+                                                    showOptionsDialog = false
+                                                    // Unshare: remove the shared folder mapping from this group
+                                                    viewModel.removeSharedFolderMapping(group.id)
+                                                    android.widget.Toast.makeText(context, "Removed from shared ledger", android.widget.Toast.LENGTH_SHORT).show()
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) { Text("Unshare Ledger", color = MaterialTheme.colorScheme.error) }
                                         }
                                         TextButton(
                                             onClick = {

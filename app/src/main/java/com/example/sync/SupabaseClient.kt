@@ -2,6 +2,11 @@ package com.example.sync
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -331,5 +336,162 @@ object SupabaseClient {
         return getJson("sync_events",
             "shared_folder_id=eq.$sharedFolderId&order=created_at.desc&limit=100")
             .map { it.toSyncEventList() }
+    }
+
+    // ── API: Members Management ──────────────────────────
+
+    /** Deactivate a member (owner removes them) */
+    suspend fun deactivateMember(memberId: Long): Result<Boolean> {
+        return patchRequest("shared_members", "id=eq.$memberId",
+            """{"is_active": false}""")
+    }
+
+    /** Get only active members for a shared folder */
+    suspend fun getActiveMembers(sharedFolderId: Long): Result<List<SharedMember>> {
+        return getJson("shared_members",
+            "shared_folder_id=eq.$sharedFolderId&is_active=eq.true")
+            .map { it.toSharedMemberList() }
+    }
+
+    /** Deactivate own membership (leave the folder) */
+    suspend fun leaveFolder(sharedFolderId: Long, deviceId: String): Result<Boolean> {
+        return patchRequest("shared_members",
+            "shared_folder_id=eq.$sharedFolderId&device_id=eq.$deviceId",
+            """{"is_active": false}""")
+    }
+
+    // ── Realtime WebSocket (Phoenix Channels) ────────────
+
+    /**
+     * A change notification from the Supabase Realtime WebSocket.
+     * Maps to postgres_changes INSERT / UPDATE / DELETE events.
+     */
+    data class RealtimeChange(
+        val eventType: String,          // "INSERT", "UPDATE", "DELETE"
+        val table: String,
+        val record: JSONObject,
+        val oldRecord: JSONObject,
+    )
+
+    /**
+     * Subscribe to realtime changes on shared_entries filtered by shared_folder_id.
+     * Uses OkHttp WebSocket + Phoenix Channels protocol.
+     * Automatically reconnects on failure with exponential backoff.
+     * The Flow completes when the collector cancels.
+     */
+    fun realtimeChanges(sharedFolderId: Long): Flow<RealtimeChange> = callbackFlow {
+        var refCounter = 0L
+        fun nextRef() = (++refCounter).toString()
+
+        val wsUrl = SUPABASE_URL.replace("https://", "wss://") +
+                "/realtime/v1/websocket?apikey=$ANON_KEY&vsn=1.0.0"
+        var ws: WebSocket? = null
+        var heartbeatJob: kotlinx.coroutines.Job? = null
+        var channelJoined = false
+        var reconnectAttempt = 0
+        var disposed = false  // prevents reconnect after collector cancellation
+
+        fun joinChannel(socket: WebSocket) {
+            val joinRef = nextRef()
+            val msg = JSONArray().apply {
+                put(joinRef)          // join_ref
+                put(joinRef)          // ref
+                put("realtime:shared_entries")  // topic
+                put("phx_join")       // event
+                put(JSONObject().apply {
+                    put("body", JSONObject().apply {
+                        put("shared_folder_id", "eq.$sharedFolderId")
+                    })
+                })
+            }
+            socket.send(msg.toString())
+        }
+
+        fun sendHeartbeat(socket: WebSocket) {
+            val msg = JSONArray().apply {
+                put(JSONObject.NULL)   // join_ref
+                put(JSONObject.NULL)   // ref
+                put("phoenix")         // topic
+                put("heartbeat")       // event
+                put(JSONObject())      // payload
+            }
+            socket.send(msg.toString())
+        }
+
+        fun connect() {
+            val request = Request.Builder().url(wsUrl).build()
+            ws = client.newWebSocket(request, object : WebSocketListener() {
+                override fun onOpen(socket: WebSocket, response: Response) {
+                    reconnectAttempt = 0
+                    channelJoined = false
+                    joinChannel(socket)
+                    // Start heartbeat every 30s
+                    heartbeatJob?.cancel()
+                    heartbeatJob = kotlinx.coroutines.GlobalScope.launch {
+                        while (isActive) {
+                            delay(30_000)
+                            if (channelJoined) {
+                                sendHeartbeat(socket)
+                            }
+                        }
+                    }
+                }
+
+                override fun onMessage(socket: WebSocket, text: String) {
+                    try {
+                        val arr = JSONArray(text)
+                        if (arr.length() < 4) return
+                        val event = arr.optString(3)
+                        val payload = arr.optJSONObject(4) ?: return
+                        when (event) {
+                            "phx_reply" -> {
+                                val status = payload.optString("status")
+                                if (status == "ok") {
+                                    channelJoined = true
+                                }
+                            }
+                            "postgres_changes" -> {
+                                val type = payload.optString("type", "")
+                                val table = payload.optString("table", "")
+                                val record = payload.optJSONObject("record") ?: JSONObject()
+                                val oldRecord = payload.optJSONObject("old_record") ?: JSONObject()
+                                trySend(RealtimeChange(type, table, record, oldRecord))
+                            }
+                        }
+                    } catch (_: Exception) {
+                        // drop malformed messages silently
+                    }
+                }
+
+                override fun onFailure(socket: WebSocket, t: Throwable, response: Response?) {
+                    channelJoined = false
+                    heartbeatJob?.cancel()
+                    if (disposed) return
+                    // Exponential backoff reconnect: 1s, 2s, 4s, 8s … capped at 30s
+                    if (!socket.isClosedForSend) {
+                        val delayMs = (1000L shl minOf(reconnectAttempt, 5)).coerceAtMost(30_000L)
+                        reconnectAttempt++
+                        kotlinx.coroutines.GlobalScope.launch {
+                            delay(delayMs)
+                            connect()
+                        }
+                    }
+                }
+
+                override fun onClosed(socket: WebSocket, code: Int, reason: String) {
+                    channelJoined = false
+                    heartbeatJob?.cancel()
+                }
+            })
+        }
+
+        connect()
+
+        awaitClose {
+            disposed = true
+            heartbeatJob?.cancel()
+            ws?.close(1000, "Client closed")
+            ws = null
+        }
     }
 }
