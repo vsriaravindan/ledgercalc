@@ -578,6 +578,35 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** Pull remote entries from Supabase and create local Room entries for those we don't have */
+    fun pullRemoteEntries(sharedFolderId: Long, groupId: Int) {
+        viewModelScope.launch {
+            val remoteEntries = com.example.sync.SharedFolderRepository.getFolderEntries(sharedFolderId)
+            if (remoteEntries.isFailure) return@launch
+            val existingTx = activeGroupTransactions.value
+            val existingLocalIds = existingTx.map { it.id.toLong() }.toSet()
+
+            for (remote in remoteEntries.getOrDefault(emptyList())) {
+                val localEntryId = remote.localEntryId
+                // Skip if we already have this entry locally
+                if (localEntryId != null && localEntryId in existingLocalIds) continue
+                // Skip if we already mapped this shared entry to a local one
+                if (getSharedEntryId(remote.id) != null) continue
+
+                // Create a local Room entry
+                val localId = repository.insertTransaction(
+                    com.example.data.TransactionEntry(
+                        groupId = groupId,
+                        amount = remote.amount,
+                        label = remote.label,
+                        expression = remote.expression
+                    )
+                )
+                saveEntrySyncMapping(groupId, localId, remote.id)
+            }
+        }
+    }
+
     // ── Network check ────────────────────────────────────
 
     fun isOnline(context: Context): Boolean {

@@ -55,6 +55,9 @@ fun GroupDetailScreen(
         viewModel.setActiveGroup(groupId)
         if (sharedFolderId != null) {
             viewModel.setSharedFolderInfo(sharedFolderId)
+            // Fetch permission from Supabase
+            viewModel.refreshSharedData(sharedFolderId)
+            viewModel.pullRemoteEntries(sharedFolderId, groupId)
             viewModel.loadSyncEvents(sharedFolderId)
         }
     }
