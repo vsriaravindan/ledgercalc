@@ -208,6 +208,23 @@ fun GroupsScreen(
                             )
                         }
                     }
+                    // App credit footer
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 48.dp),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                        )
+                        Text(
+                            text = "LedgerCalc · Made by Sri Aravindan",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -395,6 +412,22 @@ fun GroupsScreen(
                                 Button(onClick = { createDoc.launch("calculator_backup.json") }) { Text("Backup") }
                                 Button(onClick = { openDoc.launch(arrayOf("application/json")) }) { Text("Restore") }
                             }
+                        }
+                        // App credit
+                        item {
+                            Spacer(Modifier.height(16.dp))
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 32.dp),
+                                color = androidx.compose.ui.graphics.Color(0x22FFFFFF)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "LedgerCalc · Made by Sri Aravindan",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.ui.graphics.Color(0x66FFFFFF),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            )
                         }
                     }
                     Spacer(Modifier.height(16.dp))
