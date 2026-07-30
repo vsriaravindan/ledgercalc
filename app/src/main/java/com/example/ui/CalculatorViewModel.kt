@@ -50,6 +50,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _expression = MutableStateFlow("")
     val expression: StateFlow<String> = _expression.asStateFlow()
 
+    /** Cursor position in expression. -1 or > length = append mode (at end). */
+    private val _cursorPosition = MutableStateFlow(-1)
+    val cursorPosition: StateFlow<Int> = _cursorPosition.asStateFlow()
+
     private val _calcError = MutableStateFlow(false)
     val calcError: StateFlow<Boolean> = _calcError.asStateFlow()
 
@@ -143,10 +147,18 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Input handlers
+
+    fun setCursorPosition(pos: Int) {
+        val len = _expression.value.length
+        _cursorPosition.value = pos.coerceIn(0, len)
+    }
+
     fun onInput(value: String) {
         val current = _expression.value
         saveStateForUndo()
-        _expression.value = current + value
+        val cursor = _cursorPosition.value.let { if (it < 0 || it > current.length) current.length else it }
+        _expression.value = current.substring(0, cursor) + value + current.substring(cursor)
+        _cursorPosition.value = cursor + value.length
         updateResult()
         scheduleAutoSave()
     }
@@ -162,7 +174,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val current = _expression.value
         if (current.isNotEmpty()) {
             saveStateForUndo()
-            _expression.value = current.dropLast(1)
+            val cursor = _cursorPosition.value.let { if (it < 0 || it > current.length) current.length else it }
+            if (cursor > 0) {
+                _expression.value = current.substring(0, cursor - 1) + current.substring(cursor)
+                _cursorPosition.value = (cursor - 1).coerceAtLeast(0)
+            }
             updateResult()
             scheduleAutoSave()
         }
@@ -173,6 +189,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             saveStateForUndo()
             _expression.value = _result.value
             _result.value = ""
+            _cursorPosition.value = -1
         }
     }
 
@@ -360,6 +377,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         _expression.value = ""
         _result.value = ""
         _calcError.value = false
+        _cursorPosition.value = -1
     }
 
     // Group Management

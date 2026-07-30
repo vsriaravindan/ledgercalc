@@ -11,15 +11,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +37,8 @@ import androidx.compose.ui.unit.sp
 fun CalculatorDisplay(
     expression: String,
     result: String,
+    cursorPosition: Int = -1,
+    onCursorPositionChange: (Int) -> Unit = {},
     isError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -46,6 +53,8 @@ fun CalculatorDisplay(
         label = "cursor",
     )
 
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -53,22 +62,44 @@ fun CalculatorDisplay(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.Bottom,
     ) {
-        Text(
-            text = buildAnnotatedString {
-                append(expression.ifEmpty { " " })
-                if (expression.isNotEmpty()) {
-                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha))) {
-                        append("|")
-                    }
+        // Expression line — tappable to place cursor
+        val cursor = if (cursorPosition < 0 || cursorPosition > expression.length)
+            expression.length else cursorPosition
+
+        val annotatedExpr = buildAnnotatedString {
+            if (expression.isEmpty()) {
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))) {
+                    append("|")
+                }
+            } else {
+                append(expression.substring(0, cursor))
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha))) {
+                    append("|")
+                }
+                append(expression.substring(cursor))
+            }
+        }
+
+        ClickableText(
+            text = annotatedExpr,
+            onClick = { offset ->
+                textLayoutResult?.let { layout ->
+                    // offset is the character index in the AnnotatedString
+                    // Our annotated string has 1 extra char (the | cursor) inserted
+                    // So offset maps to: offset if offset <= cursor, otherwise offset-1
+                    val exprOffset = if (offset <= cursor) offset else offset - 1
+                    onCursorPositionChange(exprOffset.coerceIn(0, expression.length))
                 }
             },
-            fontSize = 20.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 1.sp,
-            textAlign = TextAlign.End,
+            onTextLayout = { textLayoutResult = it },
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 20.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.End,
+            ),
             modifier = Modifier.fillMaxWidth(),
-            maxLines = 2,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(

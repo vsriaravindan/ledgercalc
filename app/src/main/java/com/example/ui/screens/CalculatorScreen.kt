@@ -38,6 +38,7 @@ fun CalculatorScreen(
     val expression by viewModel.expression.collectAsStateWithLifecycle()
     val result by viewModel.result.collectAsStateWithLifecycle()
     val calcError by viewModel.calcError.collectAsStateWithLifecycle()
+    val cursorPosition by viewModel.cursorPosition.collectAsStateWithLifecycle()
     
     val lifecycleOwner = LocalLifecycleOwner.current
     val activeGroupId by viewModel.activeGroupId.collectAsStateWithLifecycle()
@@ -109,6 +110,8 @@ fun CalculatorScreen(
             CalculatorDisplay(
                 expression = expression,
                 result = result,
+                cursorPosition = cursorPosition,
+                onCursorPositionChange = { viewModel.setCursorPosition(it) },
                 isError = calcError,
                 modifier = Modifier
                     .fillMaxWidth()
