@@ -364,7 +364,7 @@ fun GroupsScreen(
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text("Settings", style = MaterialTheme.typography.titleLarge, color = androidx.compose.ui.graphics.Color.White)
                     Spacer(Modifier.height(16.dp))
-                    LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                    LazyColumn(modifier = Modifier.weight(1f, fill = true)) {
                         item {
                             Text("Theme", style = MaterialTheme.typography.titleMedium, color = androidx.compose.ui.graphics.Color.White)
                             Spacer(Modifier.height(8.dp))
