@@ -358,18 +358,20 @@ fun GroupsScreen(
 
         androidx.compose.ui.window.Dialog(onDismissRequest = { showSettingsDialog = false }) {
             androidx.compose.material3.Surface(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 560.dp)
+                    .padding(16.dp),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 560.dp)
                         .padding(24.dp)
                 ) {
                     Text("Settings", style = MaterialTheme.typography.titleLarge, color = androidx.compose.ui.graphics.Color.White)
                     Spacer(Modifier.height(16.dp))
-                    LazyColumn(modifier = Modifier.weight(1f, fill = true)) {
+                    LazyColumn(modifier = Modifier.weight(1f)) {
                         item {
                             Text("Theme", style = MaterialTheme.typography.titleMedium, color = androidx.compose.ui.graphics.Color.White)
                             Spacer(Modifier.height(8.dp))
