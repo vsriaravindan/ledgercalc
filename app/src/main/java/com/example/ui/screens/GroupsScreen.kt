@@ -361,7 +361,12 @@ fun GroupsScreen(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
             ) {
-                Column(modifier = Modifier.padding(24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .padding(24.dp)
+                ) {
                     Text("Settings", style = MaterialTheme.typography.titleLarge, color = androidx.compose.ui.graphics.Color.White)
                     Spacer(Modifier.height(16.dp))
                     LazyColumn(modifier = Modifier.weight(1f, fill = true)) {
