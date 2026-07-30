@@ -14,6 +14,7 @@ object CalculatorUtils {
         val cleaned = expression
             .replace("×", "*")
             .replace("÷", "/")
+            .replace("%", "/100")
             .replace("π", "(${PI})")
         return evaluate(cleaned)
     }
