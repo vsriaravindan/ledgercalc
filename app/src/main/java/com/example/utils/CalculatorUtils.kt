@@ -15,7 +15,6 @@ object CalculatorUtils {
             .replace("×", "*")
             .replace("÷", "/")
             .replace("π", "(${PI})")
-            .replace("%", "/100")
         return evaluate(cleaned)
     }
 

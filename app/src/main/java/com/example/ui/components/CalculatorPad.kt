@@ -48,7 +48,7 @@ fun CalculatorPad(
             CalcGlassButton(text = "C", modifier = Modifier.weight(1f).fillMaxHeight(), isClear = true, onClick = onClear)
             CalcGlassButton(text = "÷", modifier = Modifier.weight(1f).fillMaxHeight(), isOperator = true, onClick = { onInput("÷") })
             CalcGlassButton(text = "×", modifier = Modifier.weight(1f).fillMaxHeight(), isOperator = true, onClick = { onInput("×") })
-            CalcGlassButton(text = "%", modifier = Modifier.weight(1f).fillMaxHeight(), isOperator = true, onClick = { onInput("%") })
+            CalcGlassButton(text = "/", modifier = Modifier.weight(1f).fillMaxHeight(), isOperator = true, onClick = { onInput("/") })
             CalcGlassButton(text = "⌫", modifier = Modifier.weight(1f).fillMaxHeight(), isOperator = true, onClick = onDelete)
         }
         Row(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
