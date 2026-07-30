@@ -2,6 +2,8 @@ package com.example.sync
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -468,13 +470,11 @@ object SupabaseClient {
                     heartbeatJob?.cancel()
                     if (disposed) return
                     // Exponential backoff reconnect: 1s, 2s, 4s, 8s … capped at 30s
-                    if (!socket.isClosedForSend) {
-                        val delayMs = (1000L shl minOf(reconnectAttempt, 5)).coerceAtMost(30_000L)
-                        reconnectAttempt++
-                        kotlinx.coroutines.GlobalScope.launch {
-                            delay(delayMs)
-                            connect()
-                        }
+                    val delayMs = (1000L shl minOf(reconnectAttempt, 5)).coerceAtMost(30_000L)
+                    reconnectAttempt++
+                    GlobalScope.launch {
+                        delay(delayMs)
+                        connect()
                     }
                 }
 

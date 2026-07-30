@@ -459,8 +459,8 @@ fun GroupDetailScreen(
         // Manual add / Edit dialog
         if (showManualAddDialog || showEditDialog != null) {
             val isEdit = showEditDialog != null
-            var amountStr by remember { mutableStateOf(if (isEdit) showEditDialog?.amount?.toString() ?: "" else "") }
-            var note by remember { mutableStateOf(if (isEdit) showEditDialog?.label ?: "" else "") }
+            var amountStr by remember(showEditDialog) { mutableStateOf(if (isEdit) showEditDialog?.amount?.toString() ?: "" else "") }
+            var note by remember(showEditDialog) { mutableStateOf(if (isEdit) showEditDialog?.label ?: "" else "") }
             var amountError by remember { mutableStateOf(false) }
             val txExpression = showEditDialog?.expression ?: ""
 
@@ -468,18 +468,21 @@ fun GroupDetailScreen(
                 val amt = amountStr.toDoubleOrNull()
                 if (amt == null) { amountError = true; return }
                 amountError = false
+                // Capture ALL mutable state BEFORE launching the coroutine
+                val oldTx = showEditDialog
                 coroutineScope.launch {
-                    if (isEdit) {
-                        val oldTx = showEditDialog!!
+                    if (isEdit && oldTx != null) {
                         viewModel.updateTransaction(oldTx.copy(amount = amt, label = note))
                         if (isShared && sharedFolderId != null) {
+                            // Use shared entry ID for sync, not local entry ID
+                            val sharedEntryId = viewModel.getSharedEntryId(oldTx.id.toLong()) ?: oldTx.id.toLong()
                             SharedFolderRepository.syncEditEntry(
-                                context, sharedFolderId, oldTx.id.toLong(),
+                                context, sharedFolderId, sharedEntryId,
                                 amt, note, oldTx.amount, oldTx.label, oldTx.expression
                             )
                             viewModel.refreshSyncEvents(sharedFolderId)
                         }
-                    } else {
+                    } else if (!isEdit) {
                         viewModel.addDirectEntry(groupId, amt, note)
                         if (sharedFolderId != null) viewModel.refreshSyncEvents(sharedFolderId)
                     }

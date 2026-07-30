@@ -42,6 +42,7 @@ fun GroupsScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf<LedgerGroup?>(null) }
+    var groupToDelete by remember { mutableStateOf<Int?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val createDoc = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -195,7 +196,7 @@ fun GroupsScreen(
                                         TextButton(
                                             onClick = {
                                                 showOptionsDialog = false
-                                                viewModel.deleteGroup(group.id)
+                                                groupToDelete = group.id
                                             },
                                             modifier = Modifier.fillMaxWidth()
                                         ) { Text("Delete Ledger", color = MaterialTheme.colorScheme.error) }
@@ -210,6 +211,24 @@ fun GroupsScreen(
                 }
             }
         }
+    }
+
+    // Delete group confirmation
+    if (groupToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { groupToDelete = null },
+            title = { Text("Delete Ledger") },
+            text = { Text("Are you sure you want to delete this ledger? All transactions inside it will be permanently deleted.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteGroup(groupToDelete!!)
+                    groupToDelete = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { groupToDelete = null }) { Text("Cancel") }
+            }
+        )
     }
 
     // Join dialog
@@ -233,8 +252,8 @@ fun GroupsScreen(
     }
 
     if (showAddDialog || showEditDialog != null) {
-        var name by remember { mutableStateOf(showEditDialog?.name ?: "") }
-        var selectedColor by remember { mutableStateOf(showEditDialog?.color ?: 0xFF1976D2) }
+        var name by remember(showEditDialog) { mutableStateOf(showEditDialog?.name ?: "") }
+        var selectedColor by remember(showEditDialog) { mutableStateOf(showEditDialog?.color ?: 0xFF1976D2) }
         val colors = listOf(
             0xFF1976D2, 0xFF388E3C, 0xFFD32F2F, 0xFFFBC02D,
             0xFF8E24AA, 0xFFF57C00, 0xFF0288D1, 0xFF00796B

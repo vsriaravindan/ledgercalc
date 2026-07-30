@@ -128,4 +128,20 @@ object CalculatorUtils {
 
         return if (output.isEmpty()) 0.0 else output.last()
     }
+
+    /**
+     * Format a calculation result like a real calculator:
+     * - Integers: no decimal point
+     * - Decimals: max 10 places, trailing zeros stripped
+     */
+    fun formatResult(value: Double): String {
+        if (value.isInfinite() || value.isNaN()) return "Error"
+        if (value % 1.0 == 0.0) {
+            return if (value > Long.MAX_VALUE.toDouble() || value < Long.MIN_VALUE.toDouble())
+                String.format("%.0f", value)
+            else
+                value.toLong().toString()
+        }
+        return String.format("%.10f", value).trimEnd('0').trimEnd('.')
+    }
 }

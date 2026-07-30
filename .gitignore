@@ -65,3 +65,6 @@ assets/.aistudio/
 
 # Gradle wrapper jar (re-download on build)
 **/gradle-wrapper.jar
+
+# Hermes desktop session DB
+.freebuff/

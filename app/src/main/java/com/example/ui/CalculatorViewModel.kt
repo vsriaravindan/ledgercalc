@@ -332,8 +332,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val parts = expr.split(Regex("[+\\-*/^×÷]"))
             val lastPart = parts.lastOrNull()?.trim() ?: ""
             _result.value = if (lastPart.isNotEmpty() && lastPart.toDoubleOrNull() != null) {
-                val num = lastPart.toDouble()
-                if (num % 1.0 == 0.0) num.toLong().toString() else num.toString()
+                CalculatorUtils.formatResult(lastPart.toDouble())
             } else {
                 ""
             }
@@ -349,7 +348,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
         try {
             val res = CalculatorUtils.evaluateExpression(expr)
-            _result.value = if (res % 1.0 == 0.0) res.toLong().toString() else res.toString()
+            _result.value = CalculatorUtils.formatResult(res)
             _calcError.value = false
         } catch (e: Exception) {
             _result.value = ""
